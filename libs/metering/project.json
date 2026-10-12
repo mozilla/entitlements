@@ -1,0 +1,50 @@
+{
+  "name": "metering",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/metering/src",
+  "projectType": "library",
+  "tags": ["scope:lib"],
+  "targets": {
+    "migrate-clickhouse": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node libs/metering/migrations/clickhouse/migrate.mjs"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "libs/metering/**/*.ts",
+          "libs/metering/package.json"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/metering/tsconfig.lib.json",
+          "tsc --noEmit -p libs/metering/tsconfig.spec.json"
+        ]
+      }
+    },
+    "test-unit": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/metering/jest.config.ts",
+        "testPathPatterns": ["^(?!.*\\.in\\.spec\\.ts$).*$"]
+      }
+    },
+    "test-integration": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/metering/jest.config.ts",
+        "testPathPatterns": ["\\.in\\.spec\\.ts$"]
+      }
+    }
+  }
+}
