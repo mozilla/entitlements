@@ -72,18 +72,31 @@ _Note:_ For authoritative targets, check each project's **`project.json`**.
 
 > When asked, show the exact minimal command block you intend to run; wait for approval.
 
-## 6) Git Commit Messages
+## 6) Commits & Pull Requests
 
-Key points: `type(scope): subject` format; imperative present tense subject; `Because:` / `This commit:` body sections; `Closes ENT-N` footer for tickets.
+Keep commits and PRs short and to the point. No superfluous detail.
 
-**Never add a `Co-Authored-By: Claude ...` trailer** to any commit message.
+**Commits:** subject is `type(scope): lowercase imperative summary`, ≤72 chars. A small change gets only the subject. A larger change adds one bullet each under `Because:` and `This commit:`, plus `Closes ENT-N` when there is a ticket.
 
-Length budget — these are read at `git blame` speed, so keep them scannable:
+```
+feat(metering): add usage grants
 
-- Subject ≤72 chars.
-- `Because:` — up to 3 bullets. Motivation only.
-- `This commit:` — up to 5 bullets, one line each. What changed; the why belongs in `Because:`.
-- If the change genuinely won't fit in 5 bullets, say the commit is too big rather than adding more bullets.
+Because:
+
+- We want to raise a subject's limit without changing the meter
+
+This commit:
+
+- Adds endpoints to create, list, and delete usage grants
+
+Closes ENT-37
+```
+
+```
+fix(deps): add @opentelemetry/semantic-conventions as a runtime dep
+```
+
+**Pull requests:** the title follows the commit subject format. The body follows `.github/PULL_REQUEST_TEMPLATE.md`, with one or two bullets per section. Open PRs as drafts. Leave the checklist boxes unchecked for the author to tick.
 
 See section 8 for phrasing.
 
