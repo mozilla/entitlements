@@ -1,0 +1,39 @@
+# Secrets
+.env.local
+.env.*.local
+*.env
+.keys
+secret*
+*.gpg
+secrets.json
+
+# Build and temp files
+dist
+tmp
+out-tsc
+**/version.json
+.nx/cache
+.nx/workspace-data
+*.tsbuildinfo
+.eslintcache
+*.swp
+.idea
+
+# Dependencies
+node_modules
+
+# Logging
+*.log*
+logs
+
+# Testing
+coverage
+artifacts
+
+# Local emulator state
+/_dev/firebase/.cache
+/_dev/firebase/.config
+
+# System files
+.DS_Store
+Thumbs.db

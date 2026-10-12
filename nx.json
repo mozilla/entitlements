@@ -1,0 +1,76 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"],
+      "cache": true
+    },
+    "lint": {
+      "inputs": ["lint", "{workspaceRoot}/.eslintrc.json"],
+      "outputs": ["{projectRoot}/.eslintcache"],
+      "cache": true
+    },
+    "typecheck": {
+      "inputs": ["typescript", "^typescript"],
+      "cache": true
+    },
+    "test-unit": {
+      "inputs": ["test", "^production"],
+      "cache": true
+    },
+    "test-integration": {
+      "inputs": ["test", "^production"]
+    },
+    "@nx/jest:jest": {
+      "cache": true,
+      "inputs": ["default", "^production", "{workspaceRoot}/jest.preset.js"],
+      "options": {
+        "passWithNoTests": true
+      },
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"]
+    },
+    "@nx/js:tsc": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    }
+  },
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*.*", "sharedGlobals"],
+    "lint": ["{projectRoot}/**/*.@(js|ts|json)"],
+    "production": [
+      "default",
+      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/**/*.(spec|test).@(js|ts)",
+      "!{projectRoot}/jest.config.@(js|ts)",
+      "!{projectRoot}/tsconfig.spec.json"
+    ],
+    "sharedGlobals": [
+      "{workspaceRoot}/tsconfig.base.json",
+      {
+        "runtime": "node -v"
+      }
+    ],
+    "test": ["default", "{workspaceRoot}/jest.preset.js"],
+    "typescript": [
+      "{projectRoot}/**/*.ts",
+      "{projectRoot}/package.json",
+      "{projectRoot}/tsconfig.*",
+      "sharedGlobals"
+    ]
+  },
+  "cli": {
+    "packageManager": "pnpm"
+  },
+  "workspaceLayout": {
+    "appsDir": "apps",
+    "libsDir": "libs"
+  },
+  "neverConnectToCloud": true,
+  "tui": {
+    "enabled": false
+  },
+  "parallel": 5,
+  "analytics": false
+}

@@ -1,0 +1,59 @@
+{
+  "compileOnSave": false,
+  "ts-node": {
+    "compilerOptions": {
+      "module": "commonjs"
+    }
+  },
+  "compilerOptions": {
+    "rootDir": ".",
+    "allowJs": false,
+    "incremental": true,
+    "inlineSources": true,
+    "inlineSourceMap": true,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2021",
+    "module": "esnext",
+    "strict": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": true,
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "useUnknownInCatchVariables": false,
+    "baseUrl": ".",
+    "typeRoots": ["./node_modules/@types"],
+    "paths": {
+      "@entitlements/metering": ["./libs/metering/src/index.ts"],
+      "@entitlements/metering/testing": ["./libs/metering/src/testing.ts"],
+      "@entitlements/shared/api-server": [
+        "./libs/shared/api-server/src/index.ts"
+      ],
+      "@entitlements/shared/cms": ["./libs/shared/cms/src/index.ts"],
+      "@entitlements/shared/cms/testing": ["./libs/shared/cms/src/testing.ts"],
+      "@entitlements/shared/db/firestore": [
+        "./libs/shared/db/firestore/src/index.ts"
+      ],
+      "@entitlements/shared/db/type-cacheable": [
+        "./libs/shared/db/type-cacheable/src/index.ts"
+      ],
+      "@entitlements/shared/error": ["./libs/shared/error/src/index.ts"],
+      "@entitlements/shared/metrics/statsd": [
+        "./libs/shared/metrics/statsd/src/index.ts"
+      ],
+      "@entitlements/shared/sentry-nest": [
+        "./libs/shared/sentry-nest/src/index.ts"
+      ],
+      "@entitlements/shared/sentry-utils": [
+        "./libs/shared/sentry-utils/src/index.ts"
+      ]
+    }
+  },
+  "exclude": ["./node_modules", "./tmp"]
+}

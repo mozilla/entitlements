@@ -1,0 +1,12 @@
+packages: []
+
+allowBuilds:
+  '@nestjs/core': false
+  '@parcel/watcher': false
+  '@scarf/scarf': false
+  '@swc/core': true
+  less: false
+  nx: true
+  protobufjs: false
+  unix-dgram: false
+  unrs-resolver: false
