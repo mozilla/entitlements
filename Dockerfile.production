@@ -1,0 +1,45 @@
+FROM node:24.15.0-bookworm-slim AS base
+
+WORKDIR /app
+
+ENV NX_DAEMON=false
+ENV NX_NO_CLOUD=true
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN npm install -g corepack@0.36.0 && corepack enable
+RUN chown node:node /app
+
+USER node
+
+COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack install
+
+FROM base AS build
+
+RUN pnpm install --frozen-lockfile
+
+COPY --chown=node:node tsconfig.base.json nx.json ./
+COPY --chown=node:node apps apps
+COPY --chown=node:node libs libs
+
+ARG APP_VERSION=unknown
+ARG GIT_SHA=unknown
+ARG SOURCE_REPO=https://github.com/mozilla/entitlements
+RUN mkdir -p config \
+    && printf '{"version":{"hash":"%s","version":"%s","source":"%s","build":""}}\n' \
+       "$GIT_SHA" "$APP_VERSION" "$SOURCE_REPO" > config/version.json
+
+RUN pnpm nx run-many -t build -p api,metering-subscriber,metering-sweep --parallel=3
+
+FROM base AS runtime
+
+ENV NODE_ENV=production
+
+RUN pnpm install --frozen-lockfile --prod
+
+COPY --from=build --chown=node:node /app/dist dist
+COPY --chown=node:node libs/metering/migrations/clickhouse libs/metering/migrations/clickhouse
+
+ARG APP_VERSION=unknown
+ENV APP_VERSION=$APP_VERSION
+
+CMD ["echo", "Must provide command to run containers, e.g. node dist/apps/api/main.js"]
