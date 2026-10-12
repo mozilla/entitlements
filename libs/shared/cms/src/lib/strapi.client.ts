@@ -1,0 +1,172 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+import type { OperationVariables } from '@apollo/client';
+import { Firestore } from '@google-cloud/firestore';
+import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { LoggerService } from '@nestjs/common';
+import { Cacheable, CacheClear } from '@type-cacheable/core';
+import EventEmitter from 'events';
+import { GraphQLClient } from 'graphql-request';
+import * as Sentry from '@sentry/node';
+
+import { FirestoreService } from '@entitlements/shared/db/firestore';
+import {
+  CacheFirstStrategy,
+  FirestoreAdapter,
+  MemoryAdapter,
+  StaleWhileRevalidateWithFallbackStrategy,
+} from '@entitlements/shared/db/type-cacheable';
+import { StrapiQueryError } from './cms.error';
+import { cacheKeyForQuery, CMS_QUERY_CACHE_KEY } from './util';
+import { StrapiClientConfig } from './strapi.client.config';
+
+const DEFAULT_FIRESTORE_OFFLINE_CACHE_TTL_SECONDS = 604800; // 604800 seconds is 7 days.
+const DEFAULT_FIRESTORE_CACHE_TTL_SECONDS = 1800; // 1800 seconds is 30 minutes.
+const DEFAULT_MEM_CACHE_TTL_SECONDS = 300; // 300 seconds is 5 minutes.
+
+export interface StrapiClientEventResponse {
+  method: string;
+  requestStartTime: number;
+  requestEndTime: number;
+  elapsed: number;
+  cache: boolean;
+  cacheType: 'method' | 'memory' | 'stale' | 'fallback' | 'fallbackFailed';
+  query?: TypedDocumentNode;
+  variables?: string;
+  error?: Error;
+}
+
+@Injectable()
+export class StrapiClient {
+  client: GraphQLClient;
+  private emitter: EventEmitter;
+  public on: (
+    event: 'response',
+    listener: (response: StrapiClientEventResponse) => void
+  ) => EventEmitter;
+  private memoryCacheAdapter: MemoryAdapter;
+  private firestoreCacheAdapter: FirestoreAdapter;
+
+  constructor(
+    private strapiClientConfig: StrapiClientConfig,
+    @Inject(FirestoreService) private firestore: Firestore,
+    @Inject(Logger) private log: LoggerService
+  ) {
+    this.client = new GraphQLClient(this.strapiClientConfig.graphqlApiUri, {
+      headers: {
+        Authorization: `Bearer ${this.strapiClientConfig.apiKey}`,
+      },
+    });
+    this.emitter = new EventEmitter();
+    this.on = this.emitter.on.bind(this.emitter);
+
+    this.memoryCacheAdapter = new MemoryAdapter();
+    this.firestoreCacheAdapter = new FirestoreAdapter(
+      this.firestore,
+      this.strapiClientConfig.firestoreCacheCollectionName ||
+        CMS_QUERY_CACHE_KEY
+    );
+  }
+
+  @Cacheable({
+    cacheKey: (args: any) => cacheKeyForQuery(args[0], args[1]),
+    strategy: (args: any, context: StrapiClient) =>
+      new CacheFirstStrategy(
+        (err) => {
+          Sentry.captureException(err);
+        },
+        (startTime, endTime, result) => {
+          // We only report cache hits since the second cache decorator above will report status
+          // if this strategy misses, and we don't want to double report.
+          if (result === 'cache') {
+            context.emitter.emit('response', {
+              method: 'query',
+              query: args[0],
+              variables: JSON.stringify(args[1]),
+              requestStartTime: startTime,
+              requestEndTime: endTime,
+              elapsed: endTime - startTime,
+              cache: true,
+              cacheType: 'memory',
+            });
+          }
+        },
+        context.log
+      ),
+    ttlSeconds: (_, context: StrapiClient) =>
+      context.strapiClientConfig.memCacheTTL || DEFAULT_MEM_CACHE_TTL_SECONDS,
+    client: (_, context: StrapiClient) => context.memoryCacheAdapter,
+  })
+  @Cacheable({
+    cacheKey: (args: any) => cacheKeyForQuery(args[0], args[1]),
+    strategy: (args: any, context: StrapiClient) =>
+      new StaleWhileRevalidateWithFallbackStrategy(
+        context.strapiClientConfig.firestoreCacheTTL ||
+          DEFAULT_FIRESTORE_CACHE_TTL_SECONDS,
+        (err) => {
+          Sentry.captureException(err);
+        },
+        (startTime, endTime, result) => {
+          context.emitter.emit('response', {
+            method: 'query',
+            query: args[0],
+            variables: JSON.stringify(args[1]),
+            requestStartTime: startTime,
+            requestEndTime: endTime,
+            elapsed: endTime - startTime,
+            error: result === 'fallback' || result === 'fallbackFailed',
+            cache: result === 'stale' || result === 'fallback',
+            cacheType: result,
+          });
+        },
+        context.log
+      ),
+    ttlSeconds: (_, context: StrapiClient) =>
+      context.strapiClientConfig.firestoreOfflineCacheTTL ||
+      DEFAULT_FIRESTORE_OFFLINE_CACHE_TTL_SECONDS,
+    client: (_, context: StrapiClient) => context.firestoreCacheAdapter,
+  })
+  async query<Result, Variables extends OperationVariables>(
+    query: TypedDocumentNode<Result, Variables>,
+    variables: Variables
+  ): Promise<Result> {
+    try {
+      return await this.client.request<Result, any>({
+        document: query,
+        variables,
+      });
+    } catch (e) {
+      throw new StrapiQueryError(query, variables, e);
+    }
+  }
+
+  async queryUncached<Result, Variables extends OperationVariables>(
+    query: TypedDocumentNode<Result, Variables>,
+    variables: Variables
+  ): Promise<Result> {
+    try {
+      return await this.client.request<Result, any>({
+        document: query,
+        variables,
+      });
+    } catch (e) {
+      throw new StrapiQueryError(query, variables, e);
+    }
+  }
+
+  @CacheClear({
+    cacheKey: (args: any) => cacheKeyForQuery(args[0], args[1]),
+    client: (_, context: StrapiClient) => context.memoryCacheAdapter,
+  })
+  @CacheClear({
+    cacheKey: (args: any) => cacheKeyForQuery(args[0], args[1]),
+    client: (_, context: StrapiClient) => context.firestoreCacheAdapter,
+  })
+  async invalidateQueryCache<Result, Variables extends OperationVariables>(
+    query: TypedDocumentNode<Result, Variables>,
+    variables: Variables
+  ) {}
+}
