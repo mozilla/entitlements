@@ -1,0 +1,78 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+import { Firestore } from '@google-cloud/firestore';
+import * as grpc from '@grpc/grpc-js';
+import { Provider } from '@nestjs/common';
+import { FirestoreConfig } from './firestore.config';
+
+/**
+ * Creates a firestore instance from a settings object.
+ * @param config
+ * @returns A firestore instance
+ */
+export function setupFirestore(config: FirebaseFirestore.Settings) {
+  const fsConfig = Object.assign({}, config);
+  // keyFilename takes precedence over credentials
+  if (fsConfig.keyFilename) {
+    delete fsConfig.credentials;
+  }
+
+  const emulatorHost = process.env['FIRESTORE_EMULATOR_HOST'];
+  if (emulatorHost) {
+    const [servicePath, port] = emulatorHost.split(':');
+    return new Firestore({
+      customHeaders: {
+        Authorization: 'Bearer owner',
+      },
+      port: Number(port),
+      // databaseId is omitted: the local firebase-tools emulator only serves the (default) database.
+      projectId: 'demo-entitlements',
+      servicePath,
+      sslCreds: grpc.credentials.createInsecure(),
+    });
+  } else {
+    return new Firestore(fsConfig);
+  }
+}
+
+/**
+ * Factory for providing access to firestore
+ */
+export const FirestoreService = Symbol('FIRESTORE');
+
+export function createFirestore(config: FirestoreConfig) {
+  const credentials =
+    config.credentials?.clientEmail && config.credentials?.privateKey
+      ? {
+          client_email: config.credentials?.clientEmail,
+          private_key: config.credentials?.privateKey,
+        }
+      : undefined;
+  const firestoreConfig: FirebaseFirestore.Settings = {
+    ...config,
+    credentials,
+  };
+  return setupFirestore(firestoreConfig);
+}
+
+export const FirestoreProvider: Provider<Firestore> = {
+  provide: FirestoreService,
+  useFactory: createFirestore,
+  inject: [FirestoreConfig],
+};
+
+/**
+ * Can be used to satisfy DI when unit testing things that should not need
+ * firestore access.
+ * Note: this will cause errors to be thrown if firestore is used
+ */
+export const MockFirestoreProvider: Provider<Firestore> = {
+  provide: FirestoreService,
+  useFactory: () => {
+    return {
+      collection: () => {},
+    } as unknown as Firestore;
+  },
+};

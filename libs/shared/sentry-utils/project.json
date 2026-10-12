@@ -1,0 +1,35 @@
+{
+  "name": "shared-sentry-utils",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/sentry-utils/src",
+  "projectType": "library",
+  "tags": ["scope:lib"],
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "libs/shared/sentry-utils/**/*.ts",
+          "libs/shared/sentry-utils/package.json"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/shared/sentry-utils/tsconfig.lib.json",
+          "tsc --noEmit -p libs/shared/sentry-utils/tsconfig.spec.json"
+        ]
+      }
+    },
+    "test-unit": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/shared/sentry-utils/jest.config.ts"
+      }
+    }
+  }
+}

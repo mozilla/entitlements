@@ -1,0 +1,35 @@
+{
+  "name": "shared-api-server",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/api-server/src",
+  "projectType": "library",
+  "tags": ["scope:lib"],
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "libs/shared/api-server/**/*.ts",
+          "libs/shared/api-server/package.json"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/shared/api-server/tsconfig.lib.json",
+          "tsc --noEmit -p libs/shared/api-server/tsconfig.spec.json"
+        ]
+      }
+    },
+    "test-unit": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/shared/api-server/jest.config.ts"
+      }
+    }
+  }
+}
