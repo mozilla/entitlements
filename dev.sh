@@ -70,7 +70,7 @@ case "${1:-}" in
     echo "  up                - Build the dev image and start everything"
     echo "  infra             - Start only infrastructure and run ClickHouse migrations"
     echo "  migrate           - Run ClickHouse migrations"
-    echo "  cms-codegen       - Regenerate Strapi GraphQL types using STRAPI_* settings from .env/.env.local"
+    echo "  cms-codegen       - Regenerate Strapi GraphQL types using STRAPI_* settings from dev.env/dev.local.env"
     echo "  down              - Stop and remove containers"
     echo "  stop              - Stop containers"
     echo "  restart [svc...]  - Restart all or the given services"

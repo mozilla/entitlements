@@ -1,8 +1,10 @@
 # Secrets
+.env
 .env.local
 .env.*.local
+.local.env
 *.env
-!/.env
+!/dev.env
 .keys
 secret*
 *.gpg

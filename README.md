@@ -47,16 +47,16 @@ The Firebase emulator UI is at http://localhost:9299. Swagger UI is at http://lo
 
 ### Configuration
 
-Apps read configuration only from environment variables. Docker Compose supplies them from two files: the committed `.env`, which holds local defaults using compose service hostnames, and the optional, gitignored `.env.local`. Values in `.env.local` win, so put overrides and secrets there. Restart the affected containers with `./dev.sh restart` after changing either file.
+Apps read configuration only from environment variables. Docker Compose supplies them from two files: the committed `dev.env`, which holds local defaults using compose service hostnames, and the optional, gitignored `dev.local.env`. Values in `dev.local.env` win, so put overrides and secrets there. Restart the affected containers with `./dev.sh restart` after changing either file.
 
-Strapi is not part of the compose stack. To exercise meter lookups, set these in `.env.local`:
+Strapi is not part of the compose stack. To exercise meter lookups, set these in `dev.local.env`:
 
 ```sh
 STRAPI_CLIENT_CONFIG__GRAPHQL_API_URI=http://host.docker.internal:1337/graphql
 STRAPI_CLIENT_CONFIG__API_KEY=YOUR_API_KEY_HERE
 ```
 
-The `local-rp` client in `.env` authenticates metering requests locally with `Authorization: Bearer local-dev-secret`.
+The `local-rp` client in `dev.env` authenticates metering requests locally with `Authorization: Bearer local-dev-secret`.
 
 ## Common tasks
 
