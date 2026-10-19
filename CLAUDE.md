@@ -98,6 +98,8 @@ fix(deps): add @opentelemetry/semantic-conventions as a runtime dep
 
 **Pull requests:** the title follows the commit subject format. The body follows `.github/PULL_REQUEST_TEMPLATE.md`, with one or two bullets per section. Open PRs as drafts. Leave the checklist boxes unchecked for the author to tick.
 
+**Releases:** every merge to `main` tags a release from the commit types. `feat` bumps minor, `!` or `BREAKING CHANGE` bumps major, and every other type bumps patch. Patch an older release from an `N.N.x` branch cut from its latest tag.
+
 See section 8 for phrasing.
 
 ## 7) Testing Guidelines
