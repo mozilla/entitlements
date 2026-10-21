@@ -127,13 +127,6 @@ jobs:
         with:
           ref: v${{ needs.release.outputs.version }}
           persist-credentials: false
-      - id: tags
-        run: |
-          tags="${IMAGE}:${VERSION}"
-          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            tags="${tags},${IMAGE}:latest"
-          fi
-          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -145,7 +138,7 @@ jobs:
           context: .
           file: Dockerfile.production
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ env.IMAGE }}:${{ env.VERSION }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: |
             APP_VERSION=${{ env.VERSION }}
