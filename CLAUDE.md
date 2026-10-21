@@ -11,7 +11,7 @@ Security takes **absolute precedence**. This repository meters usage for Mozilla
 
 ## 2) Non-Negotiables
 
-- **Secrets:** never read/print/summarize/transmit secret files/values; use placeholders (`YOUR_API_KEY_HERE`). The committed root `.env` holds local-only defaults; real values belong in `.env.local` (gitignored, do not read).
+- **Secrets:** never read/print/summarize/transmit secret files/values; use placeholders (`YOUR_API_KEY_HERE`). The committed root `dev.env` holds local-only defaults; real values belong in `dev.local.env` (gitignored, do not read).
 - **External network:** only with explicit approval to a trusted/documented endpoint.
 - **Pipelines & contracts:** flag breaking API/contract changes, including the metering HTTP API, the Pub/Sub wire event, and the webhook payload and signature.
 - **Published migrations:** **NEVER edit** existing ClickHouse migration files under `libs/metering/migrations/clickhouse/`. Add a new forward migration and bump `target-patch.json`. See that directory's README for the schema constraints.
@@ -20,7 +20,7 @@ Security takes **absolute precedence**. This repository meters usage for Mozilla
 
 _Note:_ This list must mirror `.gitignore`. If there is a discrepancy, `.gitignore` is the source of truth.
 
-- **Secrets:** `.env.local`, `.env.*.local`, `**/*.env`, `secrets.json`, `secret*`, `**/*.gpg`, `.keys`
+- **Secrets:** `dev.local.env`, `.env`, `.env.local`, `.env.*.local`, `**/*.env` (except `dev.env`), `secrets.json`, `secret*`, `**/*.gpg`, `.keys`
 - **Dependencies:** `**/node_modules/`
 - **Generated / Artifacts / Runtime / Cache:**
   `**/dist/**`, `**/.nx/cache/**`, `**/.nx/workspace-data/**`, `**/.eslintcache`, `**/*.tsbuildinfo`,
@@ -48,7 +48,7 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
   - **Imports:** use `@entitlements/<path>` aliases from `tsconfig.base.json` (e.g., `@entitlements/shared/error`); avoid deep relative imports across library boundaries.
   - **Layering:** controller → service → manager → repository/client. Business logic lives in services and managers; controllers stay thin.
   - **Tests:** co-located `*.spec.ts`. Integration tests are `*.in.spec.ts` and need local infrastructure.
-  - **Config:** `nest-typed-config` classes validated with `class-validator`, loaded from env vars with `__` as the nesting separator (e.g., `METERING_CONFIG__CLICKHOUSE__URL`). Apps never read env files; Docker Compose injects `.env` and `.env.local`. Each app declares its own `RootConfig` in `apps/<app>/src/config`.
+  - **Config:** `nest-typed-config` classes validated with `class-validator`, loaded from env vars with `__` as the nesting separator (e.g., `METERING_CONFIG__CLICKHOUSE__URL`). Apps never read env files; Docker Compose injects `dev.env` and `dev.local.env`. Don't add root `.env` files: Nx loads them into every task. Each app declares its own `RootConfig` in `apps/<app>/src/config`.
 
 ### Preferred targets & anti-duplication
 
@@ -64,7 +64,7 @@ _Note:_ For authoritative targets, check each project's **`project.json`**.
 - **Everything (Docker):** `./dev.sh up`. Builds the dev image, starts ClickHouse, Redis, and the Firebase emulators (Firestore and Pub/Sub), runs ClickHouse migrations, then starts all three apps with watch-mode rebuilds.
 - **Infrastructure only (for integration tests):** `./dev.sh infra`
 - **Logs / status:** `./dev.sh logs-apps`, `./dev.sh logs-infra`, `./dev.sh ps`. Run `./dev.sh` with no arguments for every command.
-- **Strapi:** not part of the compose stack. Point `STRAPI_CLIENT_CONFIG__GRAPHQL_API_URI` and `STRAPI_CLIENT_CONFIG__API_KEY` at a Strapi instance in `.env.local`.
+- **Strapi:** not part of the compose stack. Point `STRAPI_CLIENT_CONFIG__GRAPHQL_API_URI` and `STRAPI_CLIENT_CONFIG__API_KEY` at a Strapi instance in `dev.local.env`.
 - **Nx:** `nx build <app>`, `nx lint <project>`, `nx typecheck <project>`, `nx test-unit <project>`, `nx test-integration metering`, `nx serve <app>`
 - **Single test file:** `pnpm jest -c <project>/jest.config.ts <path/to/file.spec.ts>`
 - **ClickHouse migrations:** `./dev.sh migrate`, or `nx run metering:migrate-clickhouse` against the env-configured server.
@@ -97,6 +97,8 @@ fix(deps): add @opentelemetry/semantic-conventions as a runtime dep
 ```
 
 **Pull requests:** the title follows the commit subject format. The body follows `.github/PULL_REQUEST_TEMPLATE.md`, with one or two bullets per section. Open PRs as drafts. Leave the checklist boxes unchecked for the author to tick.
+
+**Releases:** every merge to `main` tags a release from the commit types. `feat` bumps minor, `!` or `BREAKING CHANGE` bumps major, and every other type bumps patch. Patch an older release from an `N.N.x` branch cut from its latest tag.
 
 See section 8 for phrasing.
 

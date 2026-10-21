@@ -8,8 +8,8 @@ x-app: &app
   tmpfs:
     - /app/.nx:mode=1777
   env_file:
-    - path: ./.env
-    - path: ./.env.local
+    - path: ./dev.env
+    - path: ./dev.local.env
       required: false
   extra_hosts:
     - 'host.docker.internal:host-gateway'

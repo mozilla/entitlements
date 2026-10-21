@@ -5,8 +5,15 @@ coverage
 artifacts
 tmp
 .nx
-.env.local
-.env.*.local
 _dev/firebase/.cache
 _dev/firebase/.config
 *.log
+**/.env
+**/.env.local
+**/.env.*.local
+**/.local.env
+**/*.env
+**/.keys
+**/secret*
+**/*.gpg
+**/secrets.json
