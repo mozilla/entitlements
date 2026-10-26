@@ -12,6 +12,7 @@ import { AppService } from './app.service';
 import { RootConfigModule } from '../config/config.module';
 import {
   ClickHouseClient,
+  ClickHouseRateLimitersProvider,
   MeteringAuthGuard,
   MeteringEventsManager,
   MeteringEventsRepository,
@@ -48,6 +49,7 @@ import {
     Logger,
     AppService,
     ClickHouseClient,
+    ClickHouseRateLimitersProvider,
     FirestoreProvider,
     MeteringAuthGuard,
     MeteringConfigurationManager,

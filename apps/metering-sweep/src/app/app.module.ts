@@ -7,6 +7,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
 
 import {
   ClickHouseClient,
+  ClickHouseRateLimitersProvider,
   MeteringFirestoreProvider,
   MeteringSweepManager,
   MeteringSweepRepository,
@@ -28,6 +29,7 @@ import { RootConfigModule } from '../config/config.module';
   providers: [
     Logger,
     ClickHouseClient,
+    ClickHouseRateLimitersProvider,
     FirestoreProvider,
     MeteringConfigurationManager,
     MeteringFirestoreProvider,
