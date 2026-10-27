@@ -28,7 +28,7 @@ RUN mkdir -p config \
     && printf '{"version":{"hash":"%s","version":"%s","source":"%s","build":""}}\n' \
        "$GIT_SHA" "$APP_VERSION" "$SOURCE_REPO" > config/version.json
 
-RUN pnpm nx run-many -t build -p api,metering-subscriber,metering-sweep --parallel=3
+RUN pnpm nx run-many -t build -p api,metering-subscriber,metering-sweep,metering-metrics --parallel=4
 
 FROM base AS runtime
 

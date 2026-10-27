@@ -3,7 +3,7 @@
 set -e
 
 COMPOSE_FILE="./docker-compose-development.yaml"
-APP_SERVICES="api metering-subscriber metering-sweep"
+APP_SERVICES="api metering-subscriber metering-sweep metering-metrics"
 INFRA_SERVICES="clickhouse redis firebase"
 
 case "${1:-}" in
@@ -65,7 +65,7 @@ case "${1:-}" in
     echo ""
     echo "Commands:"
     echo "  logs <args>       - Show logs for a service or services"
-    echo "  logs-apps         - Follow logs for the api, subscriber, and sweep"
+    echo "  logs-apps         - Follow logs for the api, subscriber, sweep, and metrics job"
     echo "  logs-infra        - Follow logs for ClickHouse, Redis, and the Firebase emulators"
     echo "  up                - Build the dev image and start everything"
     echo "  infra             - Start only infrastructure and run ClickHouse migrations"

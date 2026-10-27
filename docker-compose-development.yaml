@@ -70,6 +70,15 @@ services:
       firebase:
         condition: service_healthy
 
+  metering-metrics:
+    <<: *app
+    command: sh -c 'while true; do pnpm nx run metering-metrics:run; sleep 300; done'
+    depends_on:
+      clickhouse-migrate:
+        condition: service_completed_successfully
+      firebase:
+        condition: service_healthy
+
   clickhouse-migrate:
     <<: *app
     command: node libs/metering/migrations/clickhouse/migrate.mjs
