@@ -3,16 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Provider } from '@nestjs/common';
-import { stringToBoolean } from './utils/stringToBoolean';
-import { Transform, Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  Min,
-} from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class MeteringPubSubConfig {
   @IsString()
@@ -30,10 +22,6 @@ export class MeteringPubSubConfig {
   @IsOptional()
   @IsString()
   public readonly emulatorHost?: string;
-
-  @Transform(stringToBoolean)
-  @IsBoolean()
-  public readonly consumerEnabled: boolean = false;
 
   @Type(() => Number)
   @IsInt()
@@ -66,7 +54,6 @@ export const MockMeteringPubSubConfig = {
   topicName: 'metering-events',
   subscriptionName: 'metering-events-clickhouse',
   emulatorHost: '127.0.0.1:8085',
-  consumerEnabled: false,
   publishBatchSize: 100,
   publishBatchIntervalMs: 50,
   consumerBatchSize: 1_000,

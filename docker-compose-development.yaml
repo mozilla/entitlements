@@ -52,7 +52,6 @@ services:
     command: pnpm nx serve metering-subscriber
     environment:
       PORT: 3038
-      METERING_CONFIG__PUBSUB__CONSUMER_ENABLED: 'true'
     ports:
       - '3038:3038'
     depends_on:

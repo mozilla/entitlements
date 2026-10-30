@@ -85,5 +85,3 @@ docker run entitlements node dist/apps/metering-sweep/main.js
 docker run entitlements node dist/apps/metering-metrics/main.js
 docker run entitlements node libs/metering/migrations/clickhouse/migrate.mjs
 ```
-
-The subscriber only consumes messages when `METERING_CONFIG__PUBSUB__CONSUMER_ENABLED=true`.
