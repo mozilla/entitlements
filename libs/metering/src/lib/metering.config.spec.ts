@@ -38,7 +38,6 @@ describe('MeteringConfig', () => {
     projectId: 'entitlements-dev',
     topicName: 'metering-events',
     subscriptionName: 'metering-events-clickhouse',
-    consumerEnabled: 'false',
     publishBatchSize: '100',
     publishBatchIntervalMs: '50',
     consumerBatchSize: '1000',
@@ -97,19 +96,15 @@ describe('MeteringConfig', () => {
     expect(errors).toHaveLength(0);
     expect(config.clickhouse.maxMemoryUsageBytes).toBe(268_435_456);
     expect(config.redis.dedupeTtlSeconds).toBe(90_000);
-    expect(config.pubsub.consumerEnabled).toBe(false);
+    expect(config.redis.tls).toBe(false);
   });
 
   it('rejects a boolean env string that is neither "true" nor "false"', () => {
     const { errors } = validateConfig({
       ...base,
-      pubsub: { ...validPubSub, consumerEnabled: 'treu' },
       redis: { ...validRedis, tls: '1' },
     });
-    expect(errors.map((error) => error.property).sort()).toEqual([
-      'pubsub',
-      'redis',
-    ]);
+    expect(errors.map((error) => error.property)).toEqual(['redis']);
   });
 
   it('allows a clickhouse config with no password', () => {

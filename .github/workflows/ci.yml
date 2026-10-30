@@ -116,12 +116,16 @@ jobs:
     needs: release
     if: needs.release.outputs.version != ''
     runs-on: ubuntu-latest
+    environment: build
     permissions:
       contents: read
+      id-token: write
       packages: write
     env:
       VERSION: ${{ needs.release.outputs.version }}
       IMAGE: ghcr.io/${{ github.repository }}
+      GAR_PROJECT_ID: moz-fx-entitlements-platf-063a
+      GAR_IMAGE: us-docker.pkg.dev/moz-fx-entitlements-platf-063a/entitlements-platform-prod/entitlements-platform
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,12 +137,25 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - id: gcp-auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: access_token
+          service_account: artifact-writer@${{ env.GAR_PROJECT_ID }}.iam.gserviceaccount.com
+          workload_identity_provider: ${{ vars.GCPV2_GITHUB_WORKLOAD_IDENTITY_PROVIDER }}
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: us-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.gcp-auth.outputs.access_token }}
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Dockerfile.production
           push: true
-          tags: ${{ env.IMAGE }}:${{ env.VERSION }}
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.GAR_IMAGE }}:${{ env.VERSION }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: |
             APP_VERSION=${{ env.VERSION }}

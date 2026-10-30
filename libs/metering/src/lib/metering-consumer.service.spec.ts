@@ -122,15 +122,7 @@ describe('MeteringConsumerService', () => {
   });
 
   describe('onApplicationBootstrap', () => {
-    it('does not subscribe when the consumer is disabled', () => {
-      service.onApplicationBootstrap();
-
-      expect(subscriptionOn).not.toHaveBeenCalled();
-    });
-
-    it('subscribes to messages when enabled', async () => {
-      await build({ consumerEnabled: true });
-
+    it('subscribes to messages', () => {
       service.onApplicationBootstrap();
 
       expect(subscriptionOn).toHaveBeenCalledWith(
@@ -139,9 +131,7 @@ describe('MeteringConsumerService', () => {
       );
     });
 
-    it('subscribes to subscription errors when enabled', async () => {
-      await build({ consumerEnabled: true });
-
+    it('subscribes to subscription errors', () => {
       service.onApplicationBootstrap();
 
       expect(subscriptionOn).toHaveBeenCalledWith(
@@ -557,7 +547,7 @@ describe('MeteringConsumerService', () => {
     });
 
     it('closes the subscription and flushes buffered messages', async () => {
-      await build({ consumerEnabled: true, consumerBatchSize: 100 });
+      await build({ consumerBatchSize: 100 });
       service.onApplicationBootstrap();
       const message = messageFor(WIRE_EVENT);
       service.handleMessage(message);
