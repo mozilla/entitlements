@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { RootConfigModule } from '../config/config.module';
 import {
   ClickHouseClient,
+  ClickHouseRateLimitersProvider,
   MeteringConsumerService,
   MeteringDedupeManager,
   MeteringDedupeRedisClientProvider,
@@ -26,6 +27,7 @@ import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
     Logger,
     AppService,
     ClickHouseClient,
+    ClickHouseRateLimitersProvider,
     MeteringConsumerService,
     MeteringDedupeManager,
     MeteringDedupeRedisClientProvider,

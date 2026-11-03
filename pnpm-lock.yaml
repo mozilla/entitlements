@@ -235,6 +235,9 @@ importers:
       nest-typed-config:
         specifier: ^2.10.1
         version: 2.10.1(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(axios@1.16.0(debug@4.4.3(supports-color@8.1.1)))(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
+      rate-limiter-flexible:
+        specifier: ^11.2.3
+        version: 11.2.3
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -6452,6 +6455,9 @@ packages:
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
+
+  rate-limiter-flexible@11.2.3:
+    resolution: {integrity: sha512-w4HX4toAsEbu1VksOauZwI9d6URb6/4WqJJ5Hg1bESihMt2KJfQ2iTwvDkhIg+y2HetLh65DGu/8xIkUz/xNPA==}
 
   raw-body@2.5.3:
     resolution: {integrity: sha512-s4VSOf6yN0rvbRZGxs8Om5CWj6seneMwK3oDb4lWDH0UPhWcxwOWw5+qk24bxq87szX1ydrwylIOp2uG1ojUpA==}
@@ -15103,6 +15109,8 @@ snapshots:
   queue-microtask@1.2.3: {}
 
   range-parser@1.2.1: {}
+
+  rate-limiter-flexible@11.2.3: {}
 
   raw-body@2.5.3:
     dependencies:
