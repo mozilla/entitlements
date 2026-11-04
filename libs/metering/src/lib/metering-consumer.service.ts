@@ -80,9 +80,6 @@ export class MeteringConsumerService
   }
 
   onApplicationBootstrap(): void {
-    if (!this.meteringPubSubConfig.consumerEnabled) {
-      return;
-    }
     this.subscription.on('message', (message: Message) =>
       this.handleMessage(message)
     );
