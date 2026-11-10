@@ -79,6 +79,8 @@ services:
         condition: service_completed_successfully
       firebase:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   clickhouse-migrate:
     <<: *app
