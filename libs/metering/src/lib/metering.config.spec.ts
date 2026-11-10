@@ -57,7 +57,7 @@ describe('MeteringConfig', () => {
     host: 'redis.example.com',
     port: '6379',
     tls: 'false',
-    keyPrefix: 'metering:dedupe:',
+    keyPrefix: 'metering:',
     claimTtlSeconds: '60',
     dedupeTtlSeconds: '90000',
     connectTimeoutMs: '5000',
@@ -72,11 +72,28 @@ describe('MeteringConfig', () => {
     pubsub: validPubSub,
     redis: validRedis,
     sweep: validSweep,
+    usageCounters: {},
   };
 
   it('validates a fully-populated env-shaped config with no errors', () => {
     const { errors } = validateConfig(base);
     expect(errors).toHaveLength(0);
+  });
+
+  it('applies the usage counter defaults when no setting is given', () => {
+    const { config } = validateConfig(base);
+    expect(config.usageCounters).toEqual({
+      refillTimeoutSeconds: 900,
+      ingestPauseSettleMs: 20_000,
+      ingestPauseTtlSeconds: 3600,
+      repairMarginMs: 300_000,
+      refillBatchSize: 5_000,
+    });
+  });
+
+  it('caches usage grants for an hour by default', () => {
+    const { config } = validateConfig(base);
+    expect(config.usageGrants.cacheTtlSeconds).toBe(3600);
   });
 
   it('rejects a config missing a nested section', () => {

@@ -55,6 +55,12 @@ describe('ClickHouse rate limiters against a real Redis', () => {
           points: 1,
           duration: 60,
         }),
+        usageFallback: new RateLimiterRedis({
+          storeClient,
+          keyPrefix: `${KEY_PREFIX}usage-fallback`,
+          points: 1,
+          duration: 60,
+        }),
       }
     );
   }

@@ -170,13 +170,17 @@ describe('Usage Grants Repository', () => {
   });
 
   describe('deleteUsageGrant', () => {
-    it('deletes the document when it exists', async () => {
+    it('deletes the document when it exists and returns the deleted grant', async () => {
       (mockDoc.get as jest.Mock).mockResolvedValue({
         exists: true,
+        data: () => ({ ...newGrant, reason: 'support' }),
       } as unknown as DocumentSnapshot);
 
-      await deleteUsageGrant(mockDb, 'grant-1');
-
+      await expect(deleteUsageGrant(mockDb, 'grant-1')).resolves.toEqual({
+        id: 'grant-1',
+        ...newGrant,
+        reason: 'support',
+      });
       expect(mockDb.doc).toHaveBeenCalledWith('grant-1');
       expect(mockDoc.delete).toHaveBeenCalledTimes(1);
     });
@@ -184,6 +188,7 @@ describe('Usage Grants Repository', () => {
     it('throws UsageGrantNotFoundError and does not delete when the document is missing', async () => {
       (mockDoc.get as jest.Mock).mockResolvedValue({
         exists: false,
+        data: () => undefined,
       } as unknown as DocumentSnapshot);
 
       await expect(deleteUsageGrant(mockDb, 'grant-1')).rejects.toThrow(
@@ -195,6 +200,7 @@ describe('Usage Grants Repository', () => {
     it('propagates a Firestore delete failure after the existence check passes', async () => {
       (mockDoc.get as jest.Mock).mockResolvedValue({
         exists: true,
+        data: () => newGrant,
       } as unknown as DocumentSnapshot);
       (mockDoc.delete as jest.Mock).mockRejectedValue(
         new Error('firestore down')

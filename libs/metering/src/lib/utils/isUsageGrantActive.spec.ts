@@ -2,8 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Timestamp } from '@google-cloud/firestore';
-
 import { isUsageGrantActive } from './isUsageGrantActive';
 
 describe('isUsageGrantActive', () => {
@@ -14,17 +12,16 @@ describe('isUsageGrantActive', () => {
   });
 
   it('is active when the expiry is strictly after now', () => {
-    const expiresAt = Timestamp.fromDate(new Date('2026-05-15T12:00:00.001Z'));
-    expect(isUsageGrantActive(expiresAt, now)).toBe(true);
+    const expiresAtMs = Date.parse('2026-05-15T12:00:00.001Z');
+    expect(isUsageGrantActive(expiresAtMs, now)).toBe(true);
   });
 
   it('is inactive when the expiry equals now', () => {
-    const expiresAt = Timestamp.fromDate(now);
-    expect(isUsageGrantActive(expiresAt, now)).toBe(false);
+    expect(isUsageGrantActive(now.getTime(), now)).toBe(false);
   });
 
   it('is inactive when the expiry is before now', () => {
-    const expiresAt = Timestamp.fromDate(new Date('2026-05-15T11:59:59.999Z'));
-    expect(isUsageGrantActive(expiresAt, now)).toBe(false);
+    const expiresAtMs = Date.parse('2026-05-15T11:59:59.999Z');
+    expect(isUsageGrantActive(expiresAtMs, now)).toBe(false);
   });
 });

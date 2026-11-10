@@ -28,19 +28,26 @@ export const ClickHouseRateLimitersProvider: Provider<ClickHouseRateLimiters> =
         enableOfflineQueue: false,
         ...(redisConfig.tls ? { tls: {} } : {}),
       });
+      const sharedLimiter = (keyPrefix: string, points: number) =>
+        new RateLimiterRedis({
+          storeClient,
+          keyPrefix,
+          points,
+          duration: 1,
+        });
       return {
-        read: new RateLimiterRedis({
-          storeClient,
-          keyPrefix: 'metering:clickhouse:read',
-          points: clickHouseConfig.maxReadsPerSecond,
-          duration: 1,
-        }),
-        write: new RateLimiterRedis({
-          storeClient,
-          keyPrefix: 'metering:clickhouse:write',
-          points: clickHouseConfig.maxWritesPerSecond,
-          duration: 1,
-        }),
+        read: sharedLimiter(
+          'metering:clickhouse:read',
+          clickHouseConfig.maxReadsPerSecond
+        ),
+        write: sharedLimiter(
+          'metering:clickhouse:write',
+          clickHouseConfig.maxWritesPerSecond
+        ),
+        usageFallback: sharedLimiter(
+          'metering:clickhouse:usage-fallback',
+          clickHouseConfig.maxUsageFallbackReadsPerSecond
+        ),
       };
     },
     inject: [MeteringRedisConfig, ClickHouseConfig],

@@ -4,17 +4,20 @@
 
 import { Injectable } from '@nestjs/common';
 
+import type { ClickHouseReadBudget } from './clickhouse.client';
 import { SUBJECT_CHUNK_SIZE } from './metering.constants';
 import type {
   AdvanceWatermarkParams,
   FindActiveMetersParams,
   FindNewSessionStartsParams,
   FindSessionCandidatesParams,
+  FindSessionUsageParams,
   FindWindowCandidatesParams,
   MeterKey,
   RecordedNotification,
   SentNotification,
   SessionStartRecord,
+  SessionUsage,
   SubjectsParams,
   SweepCandidate,
 } from './metering.types';
@@ -74,18 +77,45 @@ export class MeteringSweepManager {
     return result;
   }
 
-  async findSessionStarts(params: SubjectsParams): Promise<Map<string, Date>> {
+  async findSessionStarts(
+    params: SubjectsParams,
+    budget: ClickHouseReadBudget = 'read'
+  ): Promise<Map<string, Date>> {
     const result = new Map<string, Date>();
 
     for (const subjects of chunk(params.subjects, SUBJECT_CHUNK_SIZE)) {
-      const rows = await this.meteringSweepRepository.findSessionStarts({
-        clientId: params.clientId,
-        slug: params.slug,
-        subjects,
-      });
+      const rows = await this.meteringSweepRepository.findSessionStarts(
+        { clientId: params.clientId, slug: params.slug, subjects },
+        budget
+      );
 
       for (const row of rows) {
         result.set(row.subject, new Date(row.started_at));
+      }
+    }
+
+    return result;
+  }
+
+  async findSessionUsage(
+    params: FindSessionUsageParams
+  ): Promise<SessionUsage[]> {
+    const result: SessionUsage[] = [];
+
+    for (const sessions of chunk(params.sessions, SUBJECT_CHUNK_SIZE)) {
+      const rows = await this.meteringSweepRepository.findSessionUsage({
+        clientId: params.clientId,
+        slug: params.slug,
+        sessions,
+        to: params.to,
+      });
+
+      for (const row of rows) {
+        result.push({
+          subject: row.subject,
+          sessionStart: new Date(row.started_at_iso),
+          usage: row.usage,
+        });
       }
     }
 

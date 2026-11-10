@@ -9,6 +9,11 @@ export const WATERMARKS_TABLE = 'sweep_watermarks';
 
 export const SUBJECT_CHUNK_SIZE = 1_000;
 
+export const HOUR_MS = 60 * 60 * 1000;
+export const DAY_MS = 24 * HOUR_MS;
+
+export const SESSION_EXPIRY_GRACE_MS = HOUR_MS;
+
 export const MAX_TIMESTAMP_PAST_MS = 24 * 60 * 60 * 1000;
 export const MAX_TIMESTAMP_FUTURE_MS = 5 * 60 * 1000;
 export const MIN_DEDUPE_TTL_SECONDS =

@@ -39,6 +39,7 @@ describe('ClickHouseClient', () => {
     maxBytesBeforeExternalGroupBy: 55_000,
     maxReadsPerSecond: 2,
     maxWritesPerSecond: 1,
+    maxUsageFallbackReadsPerSecond: 1,
   };
 
   function respondWith(body: string, status = 200): void {
@@ -66,6 +67,10 @@ describe('ClickHouseClient', () => {
       }),
       write: new RateLimiterMemory({
         points: config.maxWritesPerSecond,
+        duration: 60,
+      }),
+      usageFallback: new RateLimiterMemory({
+        points: config.maxUsageFallbackReadsPerSecond,
         duration: 60,
       }),
     };
@@ -298,15 +303,35 @@ describe('ClickHouseClient', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('counts a rejection with its operation tag', async () => {
+    it('counts a rejection with its operation and budget tags', async () => {
       await spendReadBudget();
 
       await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
 
       expect(increment).toHaveBeenCalledWith(
         'metering.clickhouse.limit_rejected',
-        { operation: 'query' }
+        { operation: 'query', budget: 'read' }
       );
+    });
+
+    it('draws usage fallback reads from their own budget, independent of reads', async () => {
+      await spendReadBudget();
+
+      await expect(
+        client.query({ sql: 'SELECT 1', rowSchema, budget: 'usageFallback' })
+      ).resolves.toEqual([]);
+    });
+
+    it('throws ClickHouseRateLimitError once the usage fallback budget is spent', async () => {
+      await client.query({
+        sql: 'SELECT 1',
+        rowSchema,
+        budget: 'usageFallback',
+      });
+
+      await expect(
+        client.query({ sql: 'SELECT 1', rowSchema, budget: 'usageFallback' })
+      ).rejects.toThrow(ClickHouseRateLimitError);
     });
 
     it('draws inserts from the write budget, independent of reads', async () => {
@@ -328,27 +353,184 @@ describe('ClickHouseClient', () => {
       ).rejects.toThrow(ClickHouseRateLimitError);
     });
 
-    it('sends the request when the limiter store fails', async () => {
+    it('rejects a read with ClickHouseRateLimitError when the limiter store fails', async () => {
       jest
         .spyOn(rateLimiters.read, 'consume')
         .mockRejectedValue(new Error('redis unavailable'));
 
-      await client.query({ sql: 'SELECT 1', rowSchema });
+      await expect(
+        client.query({ sql: 'SELECT 1', rowSchema })
+      ).rejects.toThrow(ClickHouseRateLimitError);
+    });
+
+    it('makes no read request when the limiter store fails', async () => {
+      jest
+        .spyOn(rateLimiters.read, 'consume')
+        .mockRejectedValue(new Error('redis unavailable'));
+
+      await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a usage fallback read when the limiter store fails', async () => {
+      jest
+        .spyOn(rateLimiters.usageFallback, 'consume')
+        .mockRejectedValue(new Error('redis unavailable'));
+
+      await expect(
+        client.query({ sql: 'SELECT 1', rowSchema, budget: 'usageFallback' })
+      ).rejects.toThrow(ClickHouseRateLimitError);
+    });
+
+    it('still sends an insert when the limiter store fails', async () => {
+      respondWith('');
+      jest
+        .spyOn(rateLimiters.write, 'consume')
+        .mockRejectedValue(new Error('redis unavailable'));
+
+      await client.insert({
+        table: 'metering.events',
+        rows: [{ subject: 'a' }],
+      });
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it('counts a limiter store failure with its operation tag', async () => {
+    it('counts a limiter store failure with its operation and budget tags', async () => {
       jest
         .spyOn(rateLimiters.read, 'consume')
         .mockRejectedValue(new Error('redis unavailable'));
 
-      await client.query({ sql: 'SELECT 1', rowSchema });
+      await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
 
       expect(increment).toHaveBeenCalledWith(
         'metering.clickhouse.limiter_error',
-        { operation: 'query' }
+        { operation: 'query', budget: 'read' }
       );
+    });
+
+    it('draws streams from the read budget', async () => {
+      await spendReadBudget();
+
+      await expect(
+        collect(client.stream({ sql: 'SELECT 1', rowSchema }))
+      ).rejects.toThrow(ClickHouseRateLimitError);
+    });
+  });
+
+  describe('stream', () => {
+    function respondInChunks(chunks: string[], status = 200): void {
+      const encoder = new TextEncoder();
+      fetchMock.mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              for (const chunk of chunks) {
+                controller.enqueue(encoder.encode(chunk));
+              }
+              controller.close();
+            },
+          }),
+          { status }
+        )
+      );
+    }
+
+    it('yields each row as it arrives, across chunk boundaries', async () => {
+      respondInChunks([
+        '{"subject":"a","usage":1}\n{"subj',
+        'ect":"b","usage":2}\n',
+        '{"subject":"c","usage":3}',
+      ]);
+
+      await expect(
+        collect(client.stream({ sql: 'SELECT 1', rowSchema }))
+      ).resolves.toEqual([
+        { subject: 'a', usage: 1 },
+        { subject: 'b', usage: 2 },
+        { subject: 'c', usage: 3 },
+      ]);
+    });
+
+    it('skips blank lines', async () => {
+      respondInChunks(['{"subject":"a","usage":1}\n\n']);
+
+      await expect(
+        collect(client.stream({ sql: 'SELECT 1', rowSchema }))
+      ).resolves.toEqual([{ subject: 'a', usage: 1 }]);
+    });
+
+    it('overrides the configured settings with the per-call settings', async () => {
+      respondInChunks(['']);
+
+      await collect(
+        client.stream({
+          sql: 'SELECT 1',
+          rowSchema,
+          settings: { max_execution_time: 900 },
+        })
+      );
+
+      const url = requestUrl();
+      expect(url.searchParams.get('max_execution_time')).toBe('900');
+      expect(url.searchParams.get('max_memory_usage')).toBe('111000');
+      expect(url.searchParams.get('default_format')).toBe('JSONEachRow');
+    });
+
+    it('draws from the requested budget', async () => {
+      respondInChunks(['']);
+      await collect(
+        client.stream({ sql: 'SELECT 1', rowSchema, budget: 'usageFallback' })
+      );
+
+      await expect(
+        collect(
+          client.stream({ sql: 'SELECT 1', rowSchema, budget: 'usageFallback' })
+        )
+      ).rejects.toThrow(ClickHouseRateLimitError);
+    });
+
+    it('binds params as param_ search parameters', async () => {
+      respondInChunks(['']);
+
+      await collect(
+        client.stream({ sql: 'SELECT 1', rowSchema, params: { slug: 'chat' } })
+      );
+
+      expect(requestUrl().searchParams.get('param_slug')).toBe('chat');
+    });
+
+    it('wraps a non-2xx response in ClickHouseError', async () => {
+      respondInChunks(['Code: 241. DB::Exception: memory limit'], 500);
+
+      await expect(
+        collect(client.stream({ sql: 'SELECT 1', rowSchema }))
+      ).rejects.toThrow(ClickHouseError);
+    });
+
+    it('wraps a fetch failure in ClickHouseError', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+
+      await expect(
+        collect(client.stream({ sql: 'SELECT 1', rowSchema }))
+      ).rejects.toThrow(ClickHouseError);
+    });
+
+    it('wraps a row that fails the schema in ClickHouseError', async () => {
+      respondInChunks(['{"subject":"a"}\n']);
+
+      await expect(
+        collect(client.stream({ sql: 'SELECT 1', rowSchema }))
+      ).rejects.toThrow(ClickHouseError);
     });
   });
 });
+
+async function collect<T>(rows: AsyncGenerator<T>): Promise<T[]> {
+  const collected: T[] = [];
+  for await (const row of rows) {
+    collected.push(row);
+  }
+  return collected;
+}

@@ -7,6 +7,8 @@ import type {
   MeteringWindow,
 } from '@entitlements/shared/cms';
 
+import { HOUR_MS } from '../metering.constants';
+
 export interface MeteringWindowBounds {
   windowStart: Date;
   windowEnd: Date;
@@ -21,13 +23,32 @@ export function resolveWindow(
     case 'calendar':
       return resolveCalendarWindow(window.period, now);
     case 'sliding':
-      return {
-        windowStart: new Date(now.getTime() - window.durationMs),
-        windowEnd: new Date(now.getTime()),
-      };
+      return resolveSlidingWindow(window.durationMs, now);
     case 'session':
       return resolveSessionWindow(window.durationMs, now, sessionStart);
   }
+}
+
+function resolveSlidingWindow(
+  durationMs: number,
+  now: Date
+): MeteringWindowBounds {
+  const windowEndMs = Math.floor(now.getTime() / HOUR_MS) * HOUR_MS + HOUR_MS;
+  return {
+    windowStart: new Date(windowEndMs - durationMs),
+    windowEnd: new Date(windowEndMs),
+  };
+}
+
+export function isSessionOpen(
+  sessionStart: Date | undefined,
+  durationMs: number,
+  now: Date
+): sessionStart is Date {
+  return (
+    sessionStart !== undefined &&
+    sessionStart.getTime() + durationMs > now.getTime()
+  );
 }
 
 function resolveSessionWindow(
@@ -35,10 +56,9 @@ function resolveSessionWindow(
   now: Date,
   sessionStart?: Date
 ): MeteringWindowBounds {
-  const isOpen =
-    sessionStart !== undefined &&
-    sessionStart.getTime() + durationMs > now.getTime();
-  const startMs = isOpen ? sessionStart.getTime() : now.getTime();
+  const startMs = isSessionOpen(sessionStart, durationMs, now)
+    ? sessionStart.getTime()
+    : now.getTime();
 
   return {
     windowStart: new Date(startMs),
