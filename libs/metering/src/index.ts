@@ -16,13 +16,13 @@ export * from './lib/metering-pubsub.config';
 export * from './lib/metering-pubsub.provider';
 export * from './lib/metering-redis.config';
 export * from './lib/metering-sweep.config';
+export * from './lib/metering-usage-counters.config';
 
 export * from './lib/metering-auth.guard';
 export * from './lib/metering-exception.filter';
 
 export * from './lib/metering-consumer.service';
-export * from './lib/metering-dedupe.manager';
-export * from './lib/metering-dedupe.provider';
+export * from './lib/metering-redis.provider';
 export * from './lib/clickhouse-rate-limiter.provider';
 export * from './lib/metering-events.manager';
 export * from './lib/metering-events.repository';
@@ -37,6 +37,10 @@ export * from './lib/metering-webhook.manager';
 
 export * from './lib/usage.controller';
 export * from './lib/usage.service';
+export * from './lib/usage-counters.manager';
+export * from './lib/usage-refill.manager';
+export * from './lib/usage-refill.repository';
+export * from './lib/usage-refill.service';
 export * from './lib/usage-grants.controller';
 export * from './lib/usage-grants.manager';
 export * from './lib/usage-grants.schema';

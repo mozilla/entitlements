@@ -20,6 +20,7 @@ import {
 import { isUsageGrantActive } from './utils/isUsageGrantActive';
 import { requireMeterBySlug } from './utils/requireMeterBySlug';
 import { resolveWindow } from './utils/resolveWindow';
+import { toExpiresAtMs } from './utils/toExpiresAtMs';
 
 export interface CreateUsageGrantParams {
   request: CreateUsageGrantRequest;
@@ -103,7 +104,7 @@ export class UsageGrantsService {
       expiresAt: record.expiresAt
         ? record.expiresAt.toDate().toISOString()
         : null,
-      active: isUsageGrantActive(record.expiresAt, now),
+      active: isUsageGrantActive(toExpiresAtMs(record.expiresAt), now),
     };
   }
 }

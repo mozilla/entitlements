@@ -9,7 +9,10 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import * as Sentry from '@sentry/nestjs';
 
-import { MeteringSweepService } from '@entitlements/metering';
+import {
+  MeteringSweepService,
+  UsageRefillService,
+} from '@entitlements/metering';
 import {
   StatsDService,
   type StatsD,
@@ -17,15 +20,32 @@ import {
 
 import { AppModule } from './app/app.module';
 
+async function refillUsageCounters(
+  refillService: UsageRefillService
+): Promise<boolean> {
+  try {
+    const outcome = await refillService.refillIfNeeded();
+    Logger.log(`Usage refill outcome: ${outcome}`, 'UsageRefill');
+    return true;
+  } catch (err) {
+    Sentry.captureException(err);
+    Logger.error(err, undefined, 'UsageRefill');
+    return false;
+  }
+}
+
 async function run(): Promise<number> {
   const app = await NestFactory.createApplicationContext(AppModule);
   try {
+    const refillSucceeded = await refillUsageCounters(
+      app.get(UsageRefillService)
+    );
     const result = await app.get(MeteringSweepService).sweepAll();
     Logger.log(
       `Swept ${result.total} meters: ${result.held} held, ${result.failed} failed`,
       'MeteringSweep'
     );
-    return result.failed > 0 ? 1 : 0;
+    return result.failed > 0 || !refillSucceeded ? 1 : 0;
   } finally {
     await new Promise<void>((resolve) =>
       app.get<StatsD>(StatsDService).close(() => resolve())

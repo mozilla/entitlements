@@ -19,6 +19,7 @@ export type MeteringWindowKind = (typeof METERING_WINDOW_KINDS)[number];
 export const METERING_RETENTION_DAYS = 90;
 export const METERING_MAX_WINDOW_DURATION_MINUTES =
   METERING_RETENTION_DAYS * 24 * 60;
+export const METERING_SLIDING_WINDOW_STEP_MINUTES = 60;
 
 export type MeteringWindow =
   | { kind: 'calendar'; period: MeteringCalendarPeriod }

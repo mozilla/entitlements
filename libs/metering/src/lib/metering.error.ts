@@ -66,10 +66,10 @@ export class WebhookDispatchError extends MeteringError {
   }
 }
 
-export class DedupeError extends MeteringError {
+export class UsageCountersError extends MeteringError {
   constructor(operation: string, cause: Error) {
-    super('Redis dedupe request failed', { operation }, cause);
-    this.name = 'DedupeError';
+    super('Redis usage counters request failed', { operation }, cause);
+    this.name = 'UsageCountersError';
   }
 }
 
@@ -104,6 +104,13 @@ export class UsageGrantLifetimeNotSupportedError extends MeteringError {
       windowKind,
     });
     this.name = 'UsageGrantLifetimeNotSupportedError';
+  }
+}
+
+export class UsageGrantsLoadError extends MeteringError {
+  constructor(cause: Error) {
+    super('Failed to load usage grants', {}, cause);
+    this.name = 'UsageGrantsLoadError';
   }
 }
 

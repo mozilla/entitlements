@@ -24,6 +24,7 @@ import type {
   MeterKey,
   RecordedNotification,
   SentNotification,
+  SessionStartRecord,
   SweepAllResult,
   SweepCandidate,
   SweepOutcome,
@@ -32,12 +33,14 @@ import type {
 import { MeteringSweepConfig } from './metering-sweep.config';
 import { MeteringSweepManager } from './metering-sweep.manager';
 import { MeteringWebhookManager } from './metering-webhook.manager';
+import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 import { chunk } from './utils/chunk';
 import { computeThresholdsMet } from './utils/computeThresholdsMet';
 import { computeWindowId } from './utils/computeWindowId';
+import { sessionExpireAt } from './utils/counterExpiry';
 import { notificationKey } from './utils/notificationKey';
-import { resolveWindow } from './utils/resolveWindow';
+import { isSessionOpen, resolveWindow } from './utils/resolveWindow';
 import { shouldNotify } from './utils/shouldNotify';
 
 interface IngestRange {
@@ -53,6 +56,8 @@ interface SweepContext {
   sessionStarts: Map<string, Date>;
   now: Date;
 }
+
+type SkippedOutcome = Extract<SweepOutcome, 'no-webhooks' | 'no-thresholds'>;
 
 interface SweepTotals {
   candidates: number;
@@ -76,6 +81,7 @@ export class MeteringSweepService {
     private readonly meteringSweepManager: MeteringSweepManager,
     private readonly meteringWebhookManager: MeteringWebhookManager,
     private readonly usageGrantsManager: UsageGrantsManager,
+    private readonly usageCountersManager: UsageCountersManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
@@ -171,33 +177,24 @@ export class MeteringSweepService {
       .getNotificationThresholds()
       .filter((threshold) => threshold > 0);
 
-    if (meter.webhooks.length === 0) {
-      await this.meteringSweepManager.advanceWatermark({
-        ...params,
-        watermark: now,
-        updatedAt: now,
-      });
-      return {
-        outcome: 'no-webhooks',
-        candidates: 0,
-        dispatched: 0,
-        held: false,
-        watermark: now.toISOString(),
-      };
+    const skippedOutcome = this.skippedOutcome(meter, thresholds);
+    if (meter.window.kind === 'session') {
+      return this.sweepSessionMeter(
+        params,
+        meter,
+        thresholds,
+        watermark,
+        skippedOutcome,
+        now
+      );
     }
-    if (thresholds.length === 0 || meter.limit <= 0) {
+    if (skippedOutcome) {
       await this.meteringSweepManager.advanceWatermark({
         ...params,
         watermark: now,
         updatedAt: now,
       });
-      return {
-        outcome: 'no-thresholds',
-        candidates: 0,
-        dispatched: 0,
-        held: false,
-        watermark: now.toISOString(),
-      };
+      return this.skippedResult(skippedOutcome, now);
     }
 
     const floor = this.catchUpFloor(meter, now);
@@ -208,42 +205,11 @@ export class MeteringSweepService {
     const totals: SweepTotals = { candidates: 0, dispatched: 0 };
     while (watermark < now) {
       const range = this.nextSlice(watermark, now);
-      if (meter.window.kind === 'session') {
-        await this.detectSessionStarts(params, meter, range, now);
-      } else {
-        const candidates = await this.findWindowCandidates(
-          params,
-          meter,
-          thresholds,
-          range,
-          now
-        );
-        const slice = await this.notifyCrossings(
-          params,
-          meter,
-          thresholds,
-          candidates,
-          now
-        );
-        totals.candidates += slice.candidates;
-        totals.dispatched += slice.dispatched;
-        if (slice.failed > 0) {
-          return this.pendingRetry(params, totals, watermark);
-        }
-      }
-      await this.meteringSweepManager.advanceWatermark({
-        ...params,
-        watermark: range.ingestedUntil,
-        updatedAt: now,
-      });
-      watermark = range.ingestedUntil;
-    }
-
-    if (meter.window.kind === 'session') {
-      const candidates = await this.findSessionCandidates(
+      const candidates = await this.findWindowCandidates(
         params,
         meter,
         thresholds,
+        range,
         now
       );
       const slice = await this.notifyCrossings(
@@ -258,11 +224,93 @@ export class MeteringSweepService {
       if (slice.failed > 0) {
         return this.pendingRetry(params, totals, watermark);
       }
+      await this.meteringSweepManager.advanceWatermark({
+        ...params,
+        watermark: range.ingestedUntil,
+        updatedAt: now,
+      });
+      watermark = range.ingestedUntil;
     }
 
     return {
       ...totals,
       outcome: this.outcomeFor(totals, false),
+      held: false,
+      watermark: watermark.toISOString(),
+    };
+  }
+
+  private async sweepSessionMeter(
+    params: MeterKey,
+    meter: StrapiMeter,
+    thresholds: number[],
+    storedWatermark: Date,
+    skippedOutcome: SkippedOutcome | undefined,
+    now: Date
+  ): Promise<SweepResult> {
+    const floor = this.catchUpFloor(meter, now);
+    let watermark = storedWatermark < floor ? floor : storedWatermark;
+    while (watermark < now) {
+      const range = this.nextSlice(watermark, now);
+      await this.detectSessionStarts(params, meter, range, now);
+      await this.meteringSweepManager.advanceWatermark({
+        ...params,
+        watermark: range.ingestedUntil,
+        updatedAt: now,
+      });
+      watermark = range.ingestedUntil;
+    }
+
+    if (skippedOutcome) {
+      return this.skippedResult(skippedOutcome, watermark);
+    }
+
+    const candidates = await this.findSessionCandidates(
+      params,
+      meter,
+      thresholds,
+      now
+    );
+    const slice = await this.notifyCrossings(
+      params,
+      meter,
+      thresholds,
+      candidates,
+      now
+    );
+    const totals: SweepTotals = {
+      candidates: slice.candidates,
+      dispatched: slice.dispatched,
+    };
+    if (slice.failed > 0) {
+      return this.pendingRetry(params, totals, watermark);
+    }
+    return {
+      ...totals,
+      outcome: this.outcomeFor(totals, false),
+      held: false,
+      watermark: watermark.toISOString(),
+    };
+  }
+
+  private skippedOutcome(
+    meter: StrapiMeter,
+    thresholds: number[]
+  ): SkippedOutcome | undefined {
+    if (meter.webhooks.length === 0) {
+      return 'no-webhooks';
+    }
+    if (thresholds.length === 0 || meter.limit <= 0) {
+      return 'no-thresholds';
+    }
+    return undefined;
+  }
+
+  private skippedResult(outcome: SkippedOutcome, watermark: Date): SweepResult {
+    return {
+      outcome,
+      candidates: 0,
+      dispatched: 0,
       held: false,
       watermark: watermark.toISOString(),
     };
@@ -416,6 +464,59 @@ export class MeteringSweepService {
     this.statsd.increment('metering.sweep.sessions_opened', opened.length, {
       slug: params.slug,
     });
+    await this.correctCountedSessions(
+      params,
+      meter.window.durationMs,
+      opened,
+      now
+    );
+  }
+
+  private async correctCountedSessions(
+    params: MeterKey,
+    durationMs: number,
+    opened: SessionStartRecord[],
+    now: Date
+  ): Promise<void> {
+    const stillOpen = opened.filter((session) =>
+      isSessionOpen(session.sessionStart, durationMs, now)
+    );
+    if (stillOpen.length === 0) {
+      return;
+    }
+
+    const countedStarts = await this.usageCountersManager.findSessionStarts(
+      params,
+      stillOpen.map((session) => session.subject)
+    );
+    const diverged = stillOpen.filter(
+      (session) =>
+        countedStarts.get(session.subject)?.getTime() !==
+        session.sessionStart.getTime()
+    );
+    if (diverged.length === 0) {
+      return;
+    }
+
+    const sessionUsage = await this.meteringSweepManager.findSessionUsage({
+      ...params,
+      sessions: diverged,
+      to: new Date(now.getTime() + MAX_TIMESTAMP_FUTURE_MS),
+    });
+    await this.usageCountersManager.writeSessions(
+      sessionUsage.map((session) => ({
+        ...params,
+        ...session,
+        expireAtSeconds: sessionExpireAt(session.sessionStart, durationMs),
+      }))
+    );
+    this.statsd.increment(
+      'metering.sweep.sessions_corrected',
+      diverged.length,
+      {
+        slug: params.slug,
+      }
+    );
   }
 
   private async findWindowCandidates(

@@ -26,10 +26,18 @@ const RATE_LIMIT_KEY = 'global';
 
 export type ClickHouseParams = Record<string, string | number>;
 
+export type ClickHouseReadBudget = 'read' | 'usageFallback';
+
 export interface ClickHouseQuery<T> {
   sql: string;
   rowSchema: z.ZodType<T>;
   params?: ClickHouseParams;
+  budget?: ClickHouseReadBudget;
+}
+
+export interface ClickHouseStreamQuery<T> extends ClickHouseQuery<T> {
+  settings?: ClickHouseParams;
+  timeoutMs?: number;
 }
 
 export interface ClickHouseInsert {
@@ -69,16 +77,18 @@ export class ClickHouseClient {
     };
   }
 
-  async query<T>({ sql, rowSchema, params }: ClickHouseQuery<T>): Promise<T[]> {
-    const search: ClickHouseParams = {
-      ...this.settings,
-      default_format: 'JSONEachRow',
-    };
-    for (const [name, value] of Object.entries(params ?? {})) {
-      search[`param_${name}`] = value;
-    }
-
-    const body = await this.send('query', 'read', search, sql);
+  async query<T>({
+    sql,
+    rowSchema,
+    params,
+    budget = 'read',
+  }: ClickHouseQuery<T>): Promise<T[]> {
+    const body = await this.send(
+      'query',
+      budget,
+      this.querySearch(params),
+      sql
+    );
     return this.parseRows(body, rowSchema);
   }
 
@@ -102,62 +112,163 @@ export class ClickHouseClient {
     await this.send('command', 'write', { ...this.settings }, sql);
   }
 
+  async *stream<T>({
+    sql,
+    rowSchema,
+    params,
+    budget = 'read',
+    settings,
+    timeoutMs,
+  }: ClickHouseStreamQuery<T>): AsyncGenerator<T> {
+    const search = this.querySearch(params, settings);
+    await this.consumeBudget('stream', budget);
+
+    let response: Response;
+    try {
+      response = await this.post(search, sql, timeoutMs ?? this.timeoutMs);
+    } catch (err) {
+      throw new ClickHouseError('stream', toError(err));
+    }
+    if (!response.ok || !response.body) {
+      throw await this.responseError('stream', response);
+    }
+
+    for await (const line of this.readLines(response.body)) {
+      yield this.parseRow(line, rowSchema);
+    }
+  }
+
+  private querySearch(
+    params: ClickHouseParams | undefined,
+    settings?: ClickHouseParams
+  ): ClickHouseParams {
+    const search: ClickHouseParams = {
+      ...this.settings,
+      ...settings,
+      default_format: 'JSONEachRow',
+    };
+    for (const [name, value] of Object.entries(params ?? {})) {
+      search[`param_${name}`] = value;
+    }
+    return search;
+  }
+
   private async send(
     operation: string,
     budget: keyof ClickHouseRateLimiters,
     search: ClickHouseParams,
     body: string
   ): Promise<string> {
+    await this.consumeBudget(operation, budget);
+
+    let response: Response;
+    let text: string;
+    try {
+      response = await this.post(search, body, this.timeoutMs);
+      if (!response.ok) {
+        throw await this.responseError(operation, response);
+      }
+      text = await response.text();
+    } catch (err) {
+      if (err instanceof ClickHouseError) {
+        throw err;
+      }
+      throw new ClickHouseError(operation, toError(err));
+    }
+    return text;
+  }
+
+  private async consumeBudget(
+    operation: string,
+    budget: keyof ClickHouseRateLimiters
+  ): Promise<void> {
     try {
       await this.rateLimiters[budget].consume(RATE_LIMIT_KEY);
     } catch (rejection) {
       if (rejection instanceof RateLimiterRes) {
         this.statsd.increment('metering.clickhouse.limit_rejected', {
           operation,
+          budget,
         });
         throw new ClickHouseRateLimitError(operation);
       }
       this.statsd.increment('metering.clickhouse.limiter_error', {
         operation,
+        budget,
       });
+      if (budget !== 'write') {
+        throw new ClickHouseRateLimitError(operation);
+      }
     }
+  }
 
+  private post(
+    search: ClickHouseParams,
+    body: string,
+    timeoutMs: number
+  ): Promise<Response> {
     const url = new URL(this.endpoint);
     for (const [name, value] of Object.entries(search)) {
       url.searchParams.set(name, String(value));
     }
+    return fetch(url, {
+      method: 'POST',
+      headers: this.headers,
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  }
 
-    let response: Response;
-    let text: string;
+  private async responseError(
+    operation: string,
+    response: Response
+  ): Promise<ClickHouseError> {
+    const text = await response.text().catch(() => '');
+    return new ClickHouseError(
+      operation,
+      new Error(`ClickHouse responded ${response.status}: ${text.trim()}`)
+    );
+  }
+
+  private async *readLines(
+    body: ReadableStream<Uint8Array>
+  ): AsyncGenerator<string> {
+    const decoder = new TextDecoder();
+    let buffered = '';
     try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: this.headers,
-        body,
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-      text = await response.text();
+      for await (const chunk of body) {
+        buffered += decoder.decode(chunk, { stream: true });
+        let newline = buffered.indexOf('\n');
+        while (newline >= 0) {
+          const line = buffered.slice(0, newline);
+          buffered = buffered.slice(newline + 1);
+          if (line.trim().length > 0) {
+            yield line;
+          }
+          newline = buffered.indexOf('\n');
+        }
+      }
     } catch (err) {
-      throw new ClickHouseError(operation, toError(err));
+      throw new ClickHouseError('stream', toError(err));
     }
-
-    if (!response.ok) {
-      throw new ClickHouseError(
-        operation,
-        new Error(`ClickHouse responded ${response.status}: ${text.trim()}`)
-      );
+    buffered += decoder.decode();
+    if (buffered.trim().length > 0) {
+      yield buffered;
     }
-    return text;
   }
 
   private parseRows<T>(body: string, rowSchema: z.ZodType<T>): T[] {
-    const lines = body.split('\n').filter((line) => line.trim().length > 0);
-    return lines.map((line) => {
-      try {
-        return rowSchema.parse(JSON.parse(line));
-      } catch (err) {
-        throw new ClickHouseError('parse', toError(err));
-      }
-    });
+    return body
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => this.parseRow(line, rowSchema));
+  }
+
+  private parseRow<T>(line: string, rowSchema: z.ZodType<T>): T {
+    try {
+      return rowSchema.parse(JSON.parse(line));
+    } catch (err) {
+      throw new ClickHouseError('parse', toError(err));
+    }
   }
 }

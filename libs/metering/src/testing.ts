@@ -16,7 +16,52 @@ import {
   SESSIONS_TABLE,
   WATERMARKS_TABLE,
 } from './lib/metering.constants';
-import type { ClickHouseRateLimiters } from './lib/metering.types';
+import type {
+  ClickHouseRateLimiters,
+  MeteringRedisPipeline,
+} from './lib/metering.types';
+
+export interface RecordedRedisCommand {
+  command: string;
+  args: unknown[];
+}
+
+export function recordingRedisPipeline(
+  replies: Array<[Error | null, unknown]>,
+  commands: RecordedRedisCommand[]
+): MeteringRedisPipeline {
+  const record =
+    (command: string) =>
+    (...args: unknown[]) => {
+      commands.push({ command, args });
+    };
+  return {
+    set: record('set'),
+    get: record('get'),
+    del: record('del'),
+    hset: record('hset'),
+    hmget: record('hmget'),
+    hincrby: record('hincrby'),
+    expireat: record('expireat'),
+    eval: record('eval'),
+    exec: () => Promise.resolve(replies),
+  };
+}
+
+export function rejectingRedisPipeline(err: Error): MeteringRedisPipeline {
+  const ignore = () => undefined;
+  return {
+    set: ignore,
+    get: ignore,
+    del: ignore,
+    hset: ignore,
+    hmget: ignore,
+    hincrby: ignore,
+    expireat: ignore,
+    eval: ignore,
+    exec: () => Promise.reject(err),
+  };
+}
 
 export const INTEGRATION_CLICKHOUSE_CONFIG: ClickHouseConfig = {
   url:
@@ -34,15 +79,16 @@ export const INTEGRATION_CLICKHOUSE_CONFIG: ClickHouseConfig = {
   maxBytesBeforeExternalGroupBy: 134_217_728,
   maxReadsPerSecond: 50,
   maxWritesPerSecond: 50,
+  maxUsageFallbackReadsPerSecond: 50,
 };
 
-export const DAY_MS = 24 * 60 * 60 * 1000;
-export const HOUR_MS = 60 * 60 * 1000;
+export { DAY_MS, HOUR_MS } from './lib/metering.constants';
 
 export function integrationClickHouseRateLimiters(): ClickHouseRateLimiters {
   return {
     read: new RateLimiterMemory({ points: 1_000_000, duration: 1 }),
     write: new RateLimiterMemory({ points: 1_000_000, duration: 1 }),
+    usageFallback: new RateLimiterMemory({ points: 1_000_000, duration: 1 }),
   };
 }
 

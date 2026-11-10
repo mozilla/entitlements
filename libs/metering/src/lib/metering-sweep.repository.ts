@@ -5,7 +5,10 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { ClickHouseClient } from './clickhouse.client';
+import {
+  ClickHouseClient,
+  type ClickHouseReadBudget,
+} from './clickhouse.client';
 import {
   EVENTS_TABLE,
   NOTIFICATIONS_TABLE,
@@ -17,6 +20,7 @@ import type {
   FindActiveMetersParams,
   FindNewSessionStartsParams,
   FindSessionCandidatesParams,
+  FindSessionUsageParams,
   FindWindowCandidatesParams,
   MeterKey,
   RecordedNotification,
@@ -52,8 +56,43 @@ const meterKeyRowSchema = z.object({
   slug: z.string(),
 });
 
+const sessionUsageRowSchema = z.object({
+  subject: z.string(),
+  started_at_iso: z.string(),
+  usage: z.coerce.number(),
+});
+
 export type SweepNotificationRow = z.infer<typeof notificationRowSchema>;
 export type SweepSessionRow = z.infer<typeof sessionRowSchema>;
+export type SweepSessionUsageRow = z.infer<typeof sessionUsageRowSchema>;
+
+const FIND_SESSION_USAGE_SQL = `
+WITH detected AS
+(
+    SELECT tupleElement(pair, 1) AS subject, tupleElement(pair, 2) AS started_at
+    FROM
+    (
+        SELECT arrayJoin(
+            arrayZip({subjects:Array(String)}, {starts:Array(DateTime64(3, 'UTC'))})
+        ) AS pair
+    )
+)
+SELECT
+    d.subject AS subject,
+    formatDateTime(d.started_at, '%Y-%m-%dT%H:%i:%S.%fZ', 'UTC') AS started_at_iso,
+    sumIf(e.amount, e.event_time >= d.started_at) AS usage
+FROM detected AS d
+LEFT JOIN
+(
+    SELECT subject, event_time, amount
+    FROM ${EVENTS_TABLE}
+    WHERE client_id = {clientId:String}
+      AND slug = {slug:String}
+      AND subject IN {subjects:Array(String)}
+      AND event_time >= {earliestStart:DateTime64(3, 'UTC')}
+      AND event_time < {to:DateTime64(3, 'UTC')}
+) AS e ON e.subject = d.subject
+GROUP BY d.subject, d.started_at`;
 
 const FIND_ACTIVE_METERS_SQL = `
 SELECT DISTINCT client_id, slug
@@ -250,14 +289,44 @@ export class MeteringSweepRepository {
     });
   }
 
-  async findSessionStarts(params: SubjectsParams): Promise<SweepSessionRow[]> {
+  async findSessionStarts(
+    params: SubjectsParams,
+    budget: ClickHouseReadBudget = 'read'
+  ): Promise<SweepSessionRow[]> {
     return this.clickHouseClient.query({
       sql: FIND_SESSION_STARTS_SQL,
       rowSchema: sessionRowSchema,
+      budget,
       params: {
         clientId: params.clientId,
         slug: params.slug,
         subjects: toClickHouseStringArray(params.subjects),
+      },
+    });
+  }
+
+  async findSessionUsage(
+    params: FindSessionUsageParams
+  ): Promise<SweepSessionUsageRow[]> {
+    const earliestStartMs = Math.min(
+      ...params.sessions.map((session) => session.sessionStart.getTime())
+    );
+    return this.clickHouseClient.query({
+      sql: FIND_SESSION_USAGE_SQL,
+      rowSchema: sessionUsageRowSchema,
+      params: {
+        clientId: params.clientId,
+        slug: params.slug,
+        subjects: toClickHouseStringArray(
+          params.sessions.map((session) => session.subject)
+        ),
+        starts: toClickHouseStringArray(
+          params.sessions.map((session) =>
+            toClickHouseDateTime(session.sessionStart)
+          )
+        ),
+        earliestStart: toClickHouseDateTime(new Date(earliestStartMs)),
+        to: toClickHouseDateTime(params.to),
       },
     });
   }

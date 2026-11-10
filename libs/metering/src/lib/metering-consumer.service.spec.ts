@@ -8,6 +8,11 @@ import type { LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import {
+  MeteringConfigurationManager,
+  StrapiMeterFactory,
+  type StrapiMeter,
+} from '@entitlements/shared/cms';
+import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
@@ -17,12 +22,14 @@ import {
   MeteringPubSubConfig,
 } from './metering-pubsub.config';
 import { MeteringConsumerService } from './metering-consumer.service';
-import { MeteringDedupeManager } from './metering-dedupe.manager';
 import { MeteringEventsManager } from './metering-events.manager';
-import { ClickHouseError, DedupeError } from './metering.error';
+import { ClickHouseError, UsageCountersError } from './metering.error';
 import type { DedupeStatus, PubSubMessage } from './metering.types';
+import { UsageCountersManager } from './usage-counters.manager';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
+import { dayCountersExpireAt } from './utils/counterExpiry';
 import { hashEventId } from './utils/hashEventId';
+import { dayCountersKey, dedupeKey, sessionKey } from './utils/redisKeys';
 
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
@@ -51,13 +58,35 @@ const WIRE_EVENT = {
   timestamp: '2026-05-07T15:23:45.123Z',
 };
 
+const SESSION_DURATION_MS = 5 * 60 * 60 * 1000;
+
+function monthlyMeter(slug: string): StrapiMeter {
+  return StrapiMeterFactory({
+    slug,
+    window: { kind: 'calendar', period: 'monthly' },
+  });
+}
+
+function sessionMeter(slug: string): StrapiMeter {
+  return StrapiMeterFactory({
+    slug,
+    window: { kind: 'session', durationMs: SESSION_DURATION_MS },
+  });
+}
+
 describe('MeteringConsumerService', () => {
   let service: MeteringConsumerService;
-  let meteringDedupeManager: jest.Mocked<
-    Pick<MeteringDedupeManager, 'claim' | 'confirm' | 'release'>
+  let usageCountersManager: jest.Mocked<
+    Pick<
+      UsageCountersManager,
+      'isIngestAllowed' | 'claim' | 'confirm' | 'release'
+    >
   >;
   let meteringEventsManager: jest.Mocked<
     Pick<MeteringEventsManager, 'insertEvents'>
+  >;
+  let meteringConfigurationManager: jest.Mocked<
+    Pick<MeteringConfigurationManager, 'getMeterBySlug'>
   >;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
   let logger: jest.Mocked<Pick<LoggerService, 'error'>>;
@@ -71,7 +100,8 @@ describe('MeteringConsumerService', () => {
     subscriptionOn = jest.fn();
     subscriptionClose = jest.fn().mockResolvedValue(undefined);
     removeAllListeners = jest.fn();
-    meteringDedupeManager = {
+    usageCountersManager = {
+      isIngestAllowed: jest.fn().mockResolvedValue(true),
       claim: jest
         .fn()
         .mockImplementation((keys: string[]) =>
@@ -82,6 +112,13 @@ describe('MeteringConsumerService', () => {
     };
     meteringEventsManager = {
       insertEvents: jest.fn().mockResolvedValue(undefined),
+    };
+    meteringConfigurationManager = {
+      getMeterBySlug: jest
+        .fn()
+        .mockImplementation((slug: string) =>
+          Promise.resolve(monthlyMeter(slug))
+        ),
     };
     statsd = { increment: jest.fn() };
     logger = { error: jest.fn() };
@@ -102,8 +139,12 @@ describe('MeteringConsumerService', () => {
           useValue: { ...MockMeteringPubSubConfig, ...pubsubOverrides },
         },
         { provide: MeteringPubSubClient, useValue: pubsub },
-        { provide: MeteringDedupeManager, useValue: meteringDedupeManager },
+        { provide: UsageCountersManager, useValue: usageCountersManager },
         { provide: MeteringEventsManager, useValue: meteringEventsManager },
+        {
+          provide: MeteringConfigurationManager,
+          useValue: meteringConfigurationManager,
+        },
         { provide: StatsDService, useValue: statsd },
         { provide: Logger, useValue: logger },
       ],
@@ -180,7 +221,7 @@ describe('MeteringConsumerService', () => {
       jest.advanceTimersByTime(5_000);
       await Promise.resolve();
 
-      expect(meteringDedupeManager.claim).toHaveBeenCalledTimes(1);
+      expect(usageCountersManager.claim).toHaveBeenCalledTimes(1);
     });
 
     it('acks and drops a message that is not valid JSON', () => {
@@ -225,9 +266,9 @@ describe('MeteringConsumerService', () => {
       );
       await service.flushNow();
 
-      expect(meteringDedupeManager.claim).toHaveBeenCalledWith([
-        JSON.stringify(['vpn', 'event-1']),
-        JSON.stringify(['relay', 'event-2']),
+      expect(usageCountersManager.claim).toHaveBeenCalledWith([
+        dedupeKey('vpn', hashEventId('event-1')),
+        dedupeKey('relay', hashEventId('event-2')),
       ]);
     });
 
@@ -240,9 +281,9 @@ describe('MeteringConsumerService', () => {
       );
       await service.flushNow();
 
-      expect(meteringDedupeManager.claim).toHaveBeenCalledWith([
-        JSON.stringify(['a', 'b:c']),
-        JSON.stringify(['a:b', 'c']),
+      expect(usageCountersManager.claim).toHaveBeenCalledWith([
+        dedupeKey('a', hashEventId('b:c')),
+        dedupeKey('a:b', hashEventId('c')),
       ]);
     });
 
@@ -254,8 +295,8 @@ describe('MeteringConsumerService', () => {
       service.handleMessage(copy);
       await service.flushNow();
 
-      expect(meteringDedupeManager.claim).toHaveBeenCalledWith([
-        JSON.stringify(['vpn', 'event-1']),
+      expect(usageCountersManager.claim).toHaveBeenCalledWith([
+        dedupeKey('vpn', hashEventId('event-1')),
       ]);
       expect(meteringEventsManager.insertEvents).toHaveBeenCalledTimes(1);
       expect(meteringEventsManager.insertEvents.mock.calls[0][0]).toHaveLength(
@@ -280,7 +321,7 @@ describe('MeteringConsumerService', () => {
     });
 
     it('acks an already-stored duplicate without inserting it', async () => {
-      meteringDedupeManager.claim.mockResolvedValue(['duplicate']);
+      usageCountersManager.claim.mockResolvedValue(['duplicate']);
       const message = messageFor(WIRE_EVENT);
 
       service.handleMessage(message);
@@ -295,7 +336,7 @@ describe('MeteringConsumerService', () => {
     });
 
     it('nacks an event whose key is claimed by an unfinished batch', async () => {
-      meteringDedupeManager.claim.mockResolvedValue(['pending']);
+      usageCountersManager.claim.mockResolvedValue(['pending']);
       const message = messageFor(WIRE_EVENT);
 
       service.handleMessage(message);
@@ -311,8 +352,8 @@ describe('MeteringConsumerService', () => {
     });
 
     it('nacks the whole batch and inserts nothing when redis is down', async () => {
-      meteringDedupeManager.claim.mockRejectedValue(
-        new DedupeError('claim', new Error('connection closed'))
+      usageCountersManager.claim.mockRejectedValue(
+        new UsageCountersError('claim', new Error('connection closed'))
       );
       const first = messageFor(WIRE_EVENT);
       const second = messageFor({ ...WIRE_EVENT, id: 'event-2' });
@@ -329,18 +370,57 @@ describe('MeteringConsumerService', () => {
       );
     });
 
-    it('confirms the claims after a successful insert', async () => {
+    it('confirms the claims with the counter writes after a successful insert', async () => {
       service.handleMessage(messageFor(WIRE_EVENT));
       await service.flushNow();
 
-      expect(meteringDedupeManager.confirm).toHaveBeenCalledWith([
-        JSON.stringify(['vpn', 'event-1']),
+      const counterKey = dayCountersKey(WIRE_EVENT, '2026-05');
+      expect(usageCountersManager.confirm).toHaveBeenCalledWith(
+        [dedupeKey('vpn', hashEventId('event-1'))],
+        {
+          increments: [{ key: counterKey, field: 'd7', amount: 5 }],
+          expiries: [
+            {
+              key: counterKey,
+              expireAtSeconds: dayCountersExpireAt(
+                new Date(WIRE_EVENT.timestamp),
+                { kind: 'calendar', period: 'monthly' }
+              ),
+            },
+          ],
+          sessionEvents: [],
+        }
+      );
+    });
+
+    it('looks each slug in the batch up once', async () => {
+      service.handleMessage(messageFor(WIRE_EVENT));
+      service.handleMessage(messageFor({ ...WIRE_EVENT, id: 'event-2' }));
+      await service.flushNow();
+
+      expect(meteringConfigurationManager.getMeterBySlug.mock.calls).toEqual([
+        ['tokens'],
       ]);
     });
 
+    it('inserts events for a slug that is no longer configured without counting them', async () => {
+      meteringConfigurationManager.getMeterBySlug.mockResolvedValue(null);
+      const message = messageFor(WIRE_EVENT);
+
+      service.handleMessage(message);
+      await service.flushNow();
+
+      expect(meteringEventsManager.insertEvents).toHaveBeenCalledTimes(1);
+      expect(usageCountersManager.confirm).toHaveBeenCalledWith(
+        [dedupeKey('vpn', hashEventId('event-1'))],
+        { increments: [], expiries: [], sessionEvents: [] }
+      );
+      expect(message.ack).toHaveBeenCalled();
+    });
+
     it('still acks the batch when confirming the claims fails', async () => {
-      meteringDedupeManager.confirm.mockRejectedValue(
-        new DedupeError('confirm', new Error('connection closed'))
+      usageCountersManager.confirm.mockRejectedValue(
+        new UsageCountersError('confirm', new Error('connection closed'))
       );
       const message = messageFor(WIRE_EVENT);
 
@@ -354,7 +434,7 @@ describe('MeteringConsumerService', () => {
     });
 
     it('counts only inserted survivors in the inserted metric', async () => {
-      meteringDedupeManager.claim.mockResolvedValue(['claimed', 'duplicate']);
+      usageCountersManager.claim.mockResolvedValue(['claimed', 'duplicate']);
 
       service.handleMessage(messageFor(WIRE_EVENT));
       service.handleMessage(messageFor({ ...WIRE_EVENT, id: 'event-2' }));
@@ -382,7 +462,7 @@ describe('MeteringConsumerService', () => {
     });
 
     it('leaves the amount of a duplicate out of the amount metric', async () => {
-      meteringDedupeManager.claim.mockResolvedValue(['claimed', 'duplicate']);
+      usageCountersManager.claim.mockResolvedValue(['claimed', 'duplicate']);
 
       service.handleMessage(messageFor(WIRE_EVENT));
       service.handleMessage(
@@ -466,6 +546,143 @@ describe('MeteringConsumerService', () => {
     });
   });
 
+  describe('ingest gate', () => {
+    it('nacks the batch without claiming while ingest is not allowed', async () => {
+      usageCountersManager.isIngestAllowed.mockResolvedValue(false);
+      const message = messageFor(WIRE_EVENT);
+
+      service.handleMessage(message);
+      await service.flushNow();
+
+      expect(usageCountersManager.claim).not.toHaveBeenCalled();
+      expect(message.nack).toHaveBeenCalled();
+      expect(statsd.increment).toHaveBeenCalledWith(
+        'metering.consumer.paused',
+        1
+      );
+    });
+
+    it('nacks the batch when the ingest check fails', async () => {
+      usageCountersManager.isIngestAllowed.mockRejectedValue(
+        new UsageCountersError(
+          'isIngestAllowed',
+          new Error('connection closed')
+        )
+      );
+      const message = messageFor(WIRE_EVENT);
+
+      service.handleMessage(message);
+      await service.flushNow();
+
+      expect(usageCountersManager.claim).not.toHaveBeenCalled();
+      expect(message.nack).toHaveBeenCalled();
+      expect(statsd.increment).toHaveBeenCalledWith(
+        'metering.consumer.dedupe_error'
+      );
+    });
+  });
+
+  describe('meter lookup failure', () => {
+    beforeEach(() => {
+      meteringConfigurationManager.getMeterBySlug.mockRejectedValue(
+        new Error('strapi down')
+      );
+    });
+
+    it('releases the claims and nacks the batch before inserting', async () => {
+      const message = messageFor(WIRE_EVENT);
+
+      service.handleMessage(message);
+      await service.flushNow();
+
+      expect(meteringEventsManager.insertEvents).not.toHaveBeenCalled();
+      expect(usageCountersManager.release).toHaveBeenCalledWith([
+        dedupeKey('vpn', hashEventId('event-1')),
+      ]);
+      expect(message.nack).toHaveBeenCalled();
+    });
+
+    it('counts the failure in its own metric', async () => {
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(statsd.increment).toHaveBeenCalledWith(
+        'metering.consumer.meter_error'
+      );
+    });
+  });
+
+  describe('meter lookup failure for one slug', () => {
+    const OTHER_EVENT = { ...WIRE_EVENT, id: 'event-2', slug: 'images' };
+
+    beforeEach(() => {
+      meteringConfigurationManager.getMeterBySlug.mockImplementation(
+        (slug: string) =>
+          slug === WIRE_EVENT.slug
+            ? Promise.reject(new Error('invalid meter'))
+            : Promise.resolve(monthlyMeter(slug))
+      );
+    });
+
+    it('releases the claims and nacks only the messages of the failed slug', async () => {
+      const failed = messageFor(WIRE_EVENT);
+      const other = messageFor(OTHER_EVENT);
+
+      service.handleMessage(failed);
+      service.handleMessage(other);
+      await service.flushNow();
+
+      expect(usageCountersManager.release).toHaveBeenCalledWith([
+        dedupeKey('vpn', hashEventId('event-1')),
+      ]);
+      expect(failed.nack).toHaveBeenCalled();
+      expect(failed.ack).not.toHaveBeenCalled();
+    });
+
+    it('inserts and acks the messages of the other slugs', async () => {
+      const failed = messageFor(WIRE_EVENT);
+      const other = messageFor(OTHER_EVENT);
+
+      service.handleMessage(failed);
+      service.handleMessage(other);
+      await service.flushNow();
+
+      expect(
+        meteringEventsManager.insertEvents.mock.calls[0][0].map(
+          (event) => event.slug
+        )
+      ).toEqual(['images']);
+      expect(other.ack).toHaveBeenCalled();
+      expect(other.nack).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('session meters', () => {
+    beforeEach(() => {
+      meteringConfigurationManager.getMeterBySlug.mockImplementation(
+        (slug: string) => Promise.resolve(sessionMeter(slug))
+      );
+    });
+
+    it('sends session events to the confirm transaction', async () => {
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(usageCountersManager.confirm.mock.calls[0][1]).toEqual({
+        increments: [],
+        expiries: [],
+        sessionEvents: [
+          {
+            key: sessionKey(WIRE_EVENT),
+            eventTimeMs: Date.parse(WIRE_EVENT.timestamp),
+            amount: 5,
+            durationMs: SESSION_DURATION_MS,
+          },
+        ],
+      });
+    });
+  });
+
   describe('insert failure', () => {
     it('reports no inserted count or amount when the insert fails', async () => {
       meteringEventsManager.insertEvents.mockRejectedValue(
@@ -489,8 +706,8 @@ describe('MeteringConsumerService', () => {
       service.handleMessage(message);
       await service.flushNow();
 
-      expect(meteringDedupeManager.release).toHaveBeenCalledWith([
-        JSON.stringify(['vpn', 'event-1']),
+      expect(usageCountersManager.release).toHaveBeenCalledWith([
+        dedupeKey('vpn', hashEventId('event-1')),
       ]);
       expect(message.nack).toHaveBeenCalled();
       expect(message.ack).not.toHaveBeenCalled();
@@ -500,7 +717,7 @@ describe('MeteringConsumerService', () => {
     });
 
     it('still acks duplicates when the insert of fresh events fails', async () => {
-      meteringDedupeManager.claim.mockResolvedValue(['claimed', 'duplicate']);
+      usageCountersManager.claim.mockResolvedValue(['claimed', 'duplicate']);
       meteringEventsManager.insertEvents.mockRejectedValue(
         new ClickHouseError('insert', new Error('down'))
       );
@@ -519,8 +736,8 @@ describe('MeteringConsumerService', () => {
       meteringEventsManager.insertEvents.mockRejectedValue(
         new ClickHouseError('insert', new Error('down'))
       );
-      meteringDedupeManager.release.mockRejectedValue(
-        new DedupeError('release', new Error('connection closed'))
+      usageCountersManager.release.mockRejectedValue(
+        new UsageCountersError('release', new Error('connection closed'))
       );
       const message = messageFor(WIRE_EVENT);
 

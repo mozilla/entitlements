@@ -9,6 +9,7 @@ import {
 } from '../../cms.error';
 import {
   METERING_MAX_WINDOW_DURATION_MINUTES,
+  METERING_SLIDING_WINDOW_STEP_MINUTES,
   MeterBySlugResult,
   MeteringWindow,
   StrapiMeter,
@@ -48,6 +49,15 @@ function toMeteringWindow(meter: StrapiMeterRaw): MeteringWindow {
         throw new MeterInvalidWindowError(
           meter.slug,
           `${meter.windowKind} meters cannot exceed ${METERING_MAX_WINDOW_DURATION_MINUTES} minutes because events are only retained that long`
+        );
+      }
+      if (
+        meter.windowKind === 'sliding' &&
+        meter.windowDurationMinutes % METERING_SLIDING_WINDOW_STEP_MINUTES !== 0
+      ) {
+        throw new MeterInvalidWindowError(
+          meter.slug,
+          `sliding meters need a windowDurationMinutes that is a multiple of ${METERING_SLIDING_WINDOW_STEP_MINUTES}, because usage is counted in hourly buckets`
         );
       }
       return {

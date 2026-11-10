@@ -14,23 +14,30 @@ import {
 import * as Sentry from '@sentry/nestjs';
 
 import {
+  MeteringConfigurationManager,
+  type MeteringWindow,
+} from '@entitlements/shared/cms';
+import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MeteringDedupeManager } from './metering-dedupe.manager';
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPubSubConfig } from './metering-pubsub.config';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
 import type { MeteringWireEvent } from './metering.schema';
-import type { PubSubMessage } from './metering.types';
+import type { CounterWrites, PubSubMessage } from './metering.types';
+import { UsageCountersManager } from './usage-counters.manager';
 import { BatchBuffer } from './utils/batchBuffer';
+import { buildCounterWrites } from './utils/buildCounterWrites';
 import { hashEventId } from './utils/hashEventId';
 import { parseWireEvent } from './utils/parseWireEvent';
+import { dedupeKey } from './utils/redisKeys';
 
 interface BufferedMessage {
   message: PubSubMessage;
   event: MeteringWireEvent;
+  eventIdHash: string;
   key: string;
 }
 
@@ -38,6 +45,11 @@ interface ClassifiedBatch {
   fresh: BufferedMessage[];
   duplicates: BufferedMessage[];
   pending: BufferedMessage[];
+}
+
+interface MeterWindowLookup {
+  windowsBySlug: Map<string, MeteringWindow>;
+  failuresBySlug: Map<string, unknown>;
 }
 
 interface InsertedTotal {
@@ -58,8 +70,9 @@ export class MeteringConsumerService
   constructor(
     private readonly meteringPubSubConfig: MeteringPubSubConfig,
     @Inject(MeteringPubSubClient) pubsub: PubSub,
-    private readonly meteringDedupeManager: MeteringDedupeManager,
+    private readonly usageCountersManager: UsageCountersManager,
     private readonly meteringEventsManager: MeteringEventsManager,
+    private readonly meteringConfigurationManager: MeteringConfigurationManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
     @Inject(Logger) private readonly logger: LoggerService
   ) {
@@ -116,10 +129,12 @@ export class MeteringConsumerService
     }
 
     this.statsd.increment('metering.consumer.received');
+    const eventIdHash = hashEventId(event.id);
     this.buffer.push({
       message,
       event,
-      key: JSON.stringify([event.clientId, event.id]),
+      eventIdHash,
+      key: dedupeKey(event.clientId, eventIdHash),
     });
   }
 
@@ -128,6 +143,21 @@ export class MeteringConsumerService
   }
 
   private async processBatch(batch: BufferedMessage[]): Promise<void> {
+    let ingestAllowed: boolean;
+    try {
+      ingestAllowed = await this.usageCountersManager.isIngestAllowed();
+    } catch (err) {
+      this.nackAll(batch, 'metering.consumer.dedupe_error', err);
+      return;
+    }
+    if (!ingestAllowed) {
+      for (const { message } of batch) {
+        message.nack();
+      }
+      this.statsd.increment('metering.consumer.paused', batch.length);
+      return;
+    }
+
     let classified: ClassifiedBatch;
     try {
       classified = await this.classify(batch);
@@ -168,7 +198,7 @@ export class MeteringConsumerService
     }
 
     const candidates = Array.from(firstByKey.values());
-    const statuses = await this.meteringDedupeManager.claim(
+    const statuses = await this.usageCountersManager.claim(
       candidates.map((candidate) => candidate.key)
     );
 
@@ -188,40 +218,86 @@ export class MeteringConsumerService
   }
 
   private async insertFresh(fresh: BufferedMessage[]): Promise<void> {
-    const keys = fresh.map((buffered) => buffered.key);
+    const { windowsBySlug, failuresBySlug } =
+      await this.findWindowsBySlug(fresh);
+    for (const [slug, err] of failuresBySlug) {
+      const unavailable = fresh.filter(({ event }) => event.slug === slug);
+      await this.releaseClaims(unavailable.map((buffered) => buffered.key));
+      this.nackAll(unavailable, 'metering.consumer.meter_error', err);
+    }
+
+    const insertable = fresh.filter(
+      ({ event }) => !failuresBySlug.has(event.slug)
+    );
+    if (insertable.length === 0) {
+      return;
+    }
+    const keys = insertable.map((buffered) => buffered.key);
+
     const ingestedAt = new Date();
+    const events = insertable.map(({ event, eventIdHash }) => ({
+      eventIdHash,
+      clientId: event.clientId,
+      slug: event.slug,
+      subject: event.subject,
+      amount: event.amount,
+      eventTime: new Date(event.timestamp),
+      ingestedAt,
+    }));
     try {
-      await this.meteringEventsManager.insertEvents(
-        fresh.map(({ event }) => ({
-          eventIdHash: hashEventId(event.id),
-          clientId: event.clientId,
-          slug: event.slug,
-          subject: event.subject,
-          amount: event.amount,
-          eventTime: new Date(event.timestamp),
-          ingestedAt,
-        }))
-      );
+      await this.meteringEventsManager.insertEvents(events);
     } catch (err) {
-      await this.meteringDedupeManager
-        .release(keys)
-        .catch((releaseErr: unknown) => {
-          this.logger.error(releaseErr);
-        });
-      this.nackAll(fresh, 'metering.consumer.insert_error', err);
+      await this.releaseClaims(keys);
+      this.nackAll(insertable, 'metering.consumer.insert_error', err);
       return;
     }
 
+    await this.confirmAndCount(keys, buildCounterWrites(events, windowsBySlug));
+
+    for (const { message } of insertable) {
+      message.ack();
+    }
+    this.countInsertedEvents(insertable);
+  }
+
+  private async findWindowsBySlug(
+    fresh: BufferedMessage[]
+  ): Promise<MeterWindowLookup> {
+    const slugs = Array.from(new Set(fresh.map(({ event }) => event.slug)));
+    const results = await Promise.allSettled(
+      slugs.map((slug) =>
+        this.meteringConfigurationManager.getMeterBySlug(slug)
+      )
+    );
+    const windowsBySlug = new Map<string, MeteringWindow>();
+    const failuresBySlug = new Map<string, unknown>();
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        failuresBySlug.set(slugs[index], result.reason);
+      } else if (result.value) {
+        windowsBySlug.set(result.value.slug, result.value.window);
+      }
+    });
+    return { windowsBySlug, failuresBySlug };
+  }
+
+  private async confirmAndCount(
+    keys: string[],
+    counterWrites: CounterWrites
+  ): Promise<void> {
     try {
-      await this.meteringDedupeManager.confirm(keys);
+      await this.usageCountersManager.confirm(keys, counterWrites);
     } catch (err) {
       this.report('metering.consumer.confirm_error', err);
     }
+  }
 
-    for (const { message } of fresh) {
-      message.ack();
-    }
-    this.countInsertedEvents(fresh);
+  private async releaseClaims(keys: string[]): Promise<void> {
+    await this.usageCountersManager
+      .release(keys)
+      .catch((releaseErr: unknown) => {
+        this.logger.error(releaseErr);
+      });
   }
 
   private countInsertedEvents(fresh: BufferedMessage[]): void {

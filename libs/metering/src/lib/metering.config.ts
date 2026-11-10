@@ -7,9 +7,11 @@ import { Provider } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import {
   IsDefined,
+  IsInt,
   IsNotEmpty,
   IsObject,
   IsString,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -30,11 +32,20 @@ import {
   MeteringSweepConfig,
   MockMeteringSweepConfig,
 } from './metering-sweep.config';
+import {
+  MeteringUsageCountersConfig,
+  MockMeteringUsageCountersConfig,
+} from './metering-usage-counters.config';
 
 export class MeteringUsageGrantsConfig {
   @IsString()
   @IsNotEmpty()
   public readonly firestoreCollectionName!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  public readonly cacheTtlSeconds: number = 3600;
 }
 
 export class MeteringConfig {
@@ -74,18 +85,25 @@ export class MeteringConfig {
   @ValidateNested()
   @IsDefined()
   public readonly sweep!: MeteringSweepConfig;
+
+  @Type(() => MeteringUsageCountersConfig)
+  @ValidateNested()
+  @IsDefined()
+  public readonly usageCounters!: MeteringUsageCountersConfig;
 }
 
 export const MockMeteringConfig = {
   clients: { 'test-rp': faker.string.alphanumeric(48) },
   usageGrants: {
     firestoreCollectionName: 'test-metering-usage-grants',
+    cacheTtlSeconds: 3600,
   },
   firestore: MockMeteringFirestoreConfig,
   clickhouse: MockClickHouseConfig,
   sweep: MockMeteringSweepConfig,
   pubsub: MockMeteringPubSubConfig,
   redis: MockMeteringRedisConfig,
+  usageCounters: MockMeteringUsageCountersConfig,
 } satisfies MeteringConfig;
 
 export const MockMeteringConfigProvider = {

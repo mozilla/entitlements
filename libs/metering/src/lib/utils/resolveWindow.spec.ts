@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { resolveWindow } from './resolveWindow';
+import { isSessionOpen, resolveWindow } from './resolveWindow';
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIVE_HOURS_MS = 5 * ONE_HOUR_MS;
@@ -113,43 +113,52 @@ describe('resolveWindow', () => {
   });
 
   describe('sliding windows', () => {
-    it('spans durationMs back from now', () => {
+    it('ends at the end of the current hour', () => {
       const now = new Date('2026-05-07T15:23:45.000Z');
+      const { windowEnd } = resolveWindow(
+        { kind: 'sliding', durationMs: FIVE_HOURS_MS },
+        now
+      );
+      expect(windowEnd.toISOString()).toBe('2026-05-07T16:00:00.000Z');
+    });
+
+    it('spans durationMs of whole hours including the current hour', () => {
+      const now = new Date('2026-05-07T15:23:45.000Z');
+      const { windowStart } = resolveWindow(
+        { kind: 'sliding', durationMs: FIVE_HOURS_MS },
+        now
+      );
+      expect(windowStart.toISOString()).toBe('2026-05-07T11:00:00.000Z');
+    });
+
+    it('covers only the current hour for a one hour duration', () => {
+      const now = new Date('2026-05-07T00:30:00.000Z');
+      const { windowStart, windowEnd } = resolveWindow(
+        { kind: 'sliding', durationMs: ONE_HOUR_MS },
+        now
+      );
+      expect(windowStart.toISOString()).toBe('2026-05-07T00:00:00.000Z');
+      expect(windowEnd.toISOString()).toBe('2026-05-07T01:00:00.000Z');
+    });
+
+    it('moves to the next hour exactly at the top of the hour', () => {
+      const now = new Date('2026-05-07T16:00:00.000Z');
       const { windowStart, windowEnd } = resolveWindow(
         { kind: 'sliding', durationMs: FIVE_HOURS_MS },
         now
       );
-      expect(windowStart.toISOString()).toBe('2026-05-07T10:23:45.000Z');
-      expect(windowEnd.toISOString()).toBe('2026-05-07T15:23:45.000Z');
-    });
-
-    it('is not anchored to a calendar boundary', () => {
-      const now = new Date('2026-05-07T00:30:00.000Z');
-      const { windowStart } = resolveWindow(
-        { kind: 'sliding', durationMs: ONE_HOUR_MS },
-        now
-      );
-      expect(windowStart.toISOString()).toBe('2026-05-06T23:30:00.000Z');
+      expect(windowStart.toISOString()).toBe('2026-05-07T12:00:00.000Z');
+      expect(windowEnd.toISOString()).toBe('2026-05-07T17:00:00.000Z');
     });
 
     it('spans back across a month boundary for long durations', () => {
-      const now = new Date('2026-05-07T12:00:00.000Z');
+      const now = new Date('2026-05-07T12:10:00.000Z');
       const { windowStart, windowEnd } = resolveWindow(
         { kind: 'sliding', durationMs: THIRTY_DAYS_MS },
         now
       );
-      expect(windowStart.toISOString()).toBe('2026-04-07T12:00:00.000Z');
-      expect(windowEnd.toISOString()).toBe('2026-05-07T12:00:00.000Z');
-    });
-
-    it('preserves millisecond precision', () => {
-      const now = new Date('2026-05-07T15:23:45.123Z');
-      const { windowStart, windowEnd } = resolveWindow(
-        { kind: 'sliding', durationMs: ONE_HOUR_MS },
-        now
-      );
-      expect(windowStart.toISOString()).toBe('2026-05-07T14:23:45.123Z');
-      expect(windowEnd.toISOString()).toBe('2026-05-07T15:23:45.123Z');
+      expect(windowStart.toISOString()).toBe('2026-04-07T13:00:00.000Z');
+      expect(windowEnd.toISOString()).toBe('2026-05-07T13:00:00.000Z');
     });
 
     it('does not mutate the now argument', () => {
@@ -227,6 +236,26 @@ describe('resolveWindow', () => {
         sessionStart
       );
       expect(sessionStart.toISOString()).toBe('2026-05-07T13:00:00.000Z');
+    });
+  });
+
+  describe('isSessionOpen', () => {
+    const now = new Date('2026-05-07T15:00:00.000Z');
+
+    it('is open when the session ends after now', () => {
+      expect(
+        isSessionOpen(new Date('2026-05-07T13:00:00.000Z'), FIVE_HOURS_MS, now)
+      ).toBe(true);
+    });
+
+    it('is closed when the session ends exactly at now', () => {
+      expect(
+        isSessionOpen(new Date('2026-05-07T10:00:00.000Z'), FIVE_HOURS_MS, now)
+      ).toBe(false);
+    });
+
+    it('is closed when there is no session start', () => {
+      expect(isSessionOpen(undefined, FIVE_HOURS_MS, now)).toBe(false);
     });
   });
 });

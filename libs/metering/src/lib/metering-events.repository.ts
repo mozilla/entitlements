@@ -44,6 +44,7 @@ export class MeteringEventsRepository {
     const rows = await this.clickHouseClient.query({
       sql: SUM_USAGE_SQL,
       rowSchema: usageRowSchema,
+      budget: 'usageFallback',
       params: {
         clientId: params.clientId,
         slug: params.slug,
