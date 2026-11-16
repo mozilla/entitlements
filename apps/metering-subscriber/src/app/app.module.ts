@@ -8,12 +8,17 @@ import {
   ClickHouseClient,
   ClickHouseRateLimitersProvider,
   MeteringConsumerService,
-  MeteringDedupeManager,
-  MeteringDedupeRedisClientProvider,
   MeteringEventsManager,
   MeteringEventsRepository,
   MeteringPubSubClientProvider,
+  MeteringRedisClientProvider,
+  UsageCountersManager,
 } from '@entitlements/metering';
+import {
+  MeteringConfigurationManager,
+  StrapiClient,
+} from '@entitlements/shared/cms';
+import { FirestoreProvider } from '@entitlements/shared/db/firestore';
 import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
 
 @Module({
@@ -28,13 +33,16 @@ import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
     AppService,
     ClickHouseClient,
     ClickHouseRateLimitersProvider,
+    FirestoreProvider,
+    MeteringConfigurationManager,
     MeteringConsumerService,
-    MeteringDedupeManager,
-    MeteringDedupeRedisClientProvider,
     MeteringEventsManager,
     MeteringEventsRepository,
     MeteringPubSubClientProvider,
+    MeteringRedisClientProvider,
     StatsDProvider,
+    StrapiClient,
+    UsageCountersManager,
   ],
 })
 export class AppModule {}

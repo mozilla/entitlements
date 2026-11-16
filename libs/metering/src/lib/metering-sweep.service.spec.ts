@@ -27,6 +27,7 @@ import { MeteringSweepManager } from './metering-sweep.manager';
 import { notificationKey } from './utils/notificationKey';
 import { MeteringSweepService } from './metering-sweep.service';
 import { MeteringWebhookManager } from './metering-webhook.manager';
+import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 
 const CLIENT_ID = 'vpn';
@@ -50,12 +51,16 @@ describe('MeteringSweepService', () => {
       | 'recordNotifications'
       | 'findNewSessionStarts'
       | 'recordSessionStarts'
+      | 'findSessionUsage'
       | 'findWatermark'
       | 'advanceWatermark'
     >
   >;
   let meteringWebhookManager: jest.Mocked<
     Pick<MeteringWebhookManager, 'dispatch'>
+  >;
+  let usageCountersManager: jest.Mocked<
+    Pick<UsageCountersManager, 'findSessionStarts' | 'writeSessions'>
   >;
   let usageGrantsManager: jest.Mocked<
     Pick<UsageGrantsManager, 'getActiveGrantedAmount'>
@@ -95,11 +100,16 @@ describe('MeteringSweepService', () => {
       recordNotifications: jest.fn().mockResolvedValue(undefined),
       findNewSessionStarts: jest.fn().mockResolvedValue([]),
       recordSessionStarts: jest.fn().mockResolvedValue(undefined),
+      findSessionUsage: jest.fn().mockResolvedValue([]),
       findWatermark: jest.fn().mockResolvedValue(WATERMARK),
       advanceWatermark: jest.fn().mockResolvedValue(undefined),
     };
     meteringWebhookManager = {
       dispatch: jest.fn().mockResolvedValue(undefined),
+    };
+    usageCountersManager = {
+      findSessionStarts: jest.fn().mockResolvedValue(new Map()),
+      writeSessions: jest.fn().mockResolvedValue(undefined),
     };
     usageGrantsManager = {
       getActiveGrantedAmount: jest.fn().mockResolvedValue(0),
@@ -118,6 +128,7 @@ describe('MeteringSweepService', () => {
         { provide: MeteringSweepManager, useValue: meteringSweepManager },
         { provide: MeteringWebhookManager, useValue: meteringWebhookManager },
         { provide: UsageGrantsManager, useValue: usageGrantsManager },
+        { provide: UsageCountersManager, useValue: usageCountersManager },
         { provide: StatsDService, useValue: statsd },
         { provide: Logger, useValue: logger },
       ],
@@ -778,6 +789,124 @@ describe('MeteringSweepService', () => {
 
       expect(meteringSweepManager.findNewSessionStarts).not.toHaveBeenCalled();
       expect(meteringSweepManager.recordSessionStarts).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        outcome: 'no-webhooks',
+        override: { webhooks: [] },
+      },
+      {
+        outcome: 'no-thresholds',
+        override: { notificationThresholds: '' },
+      },
+    ])(
+      'records session starts for a meter with $outcome',
+      async ({ outcome, override }) => {
+        meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
+          utilFor(
+            meter({
+              windowKind: 'session',
+              windowPeriod: null,
+              windowDurationMinutes: SESSION_MINUTES,
+              ...override,
+            })
+          )
+        );
+        meteringSweepManager.findNewSessionStarts.mockResolvedValue([
+          { ...params, subject: 'user-1', sessionStart: NOW },
+        ]);
+
+        const result = await service.sweep(params, NOW);
+
+        expect(meteringSweepManager.recordSessionStarts).toHaveBeenCalledWith([
+          { ...params, subject: 'user-1', sessionStart: NOW },
+        ]);
+        expect(result.outcome).toBe(outcome);
+        expect(
+          meteringSweepManager.findSessionCandidates
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+    describe('correcting the counted session in Redis', () => {
+      const durationMs = SESSION_MINUTES * 60 * 1000;
+      const startedAt = new Date(NOW.getTime() - 60 * 60 * 1000);
+      const opened = { ...params, subject: 'user-1', sessionStart: startedAt };
+
+      beforeEach(() => {
+        meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
+          sessionMeter()
+        );
+        meteringSweepManager.findNewSessionStarts.mockResolvedValue([opened]);
+      });
+
+      it('leaves Redis alone when it counted the same start', async () => {
+        usageCountersManager.findSessionStarts.mockResolvedValue(
+          new Map([['user-1', startedAt]])
+        );
+
+        await service.sweep(params, NOW);
+
+        expect(meteringSweepManager.findSessionUsage).not.toHaveBeenCalled();
+        expect(usageCountersManager.writeSessions).not.toHaveBeenCalled();
+      });
+
+      it('overwrites Redis with the ClickHouse start and usage when they differ', async () => {
+        usageCountersManager.findSessionStarts.mockResolvedValue(
+          new Map([['user-1', new Date(startedAt.getTime() + 60_000)]])
+        );
+        meteringSweepManager.findSessionUsage.mockResolvedValue([
+          { subject: 'user-1', sessionStart: startedAt, usage: 9 },
+        ]);
+
+        await service.sweep(params, NOW);
+
+        expect(meteringSweepManager.findSessionUsage).toHaveBeenCalledWith({
+          ...params,
+          sessions: [opened],
+          to: new Date(NOW.getTime() + 5 * 60 * 1000),
+        });
+        expect(usageCountersManager.writeSessions).toHaveBeenCalledWith([
+          {
+            ...params,
+            subject: 'user-1',
+            sessionStart: startedAt,
+            usage: 9,
+            expireAtSeconds: Math.ceil(
+              (startedAt.getTime() + durationMs + 60 * 60 * 1000) / 1000
+            ),
+          },
+        ]);
+        expect(statsd.increment).toHaveBeenCalledWith(
+          'metering.sweep.sessions_corrected',
+          1,
+          { slug: SLUG }
+        );
+      });
+
+      it('writes a session Redis has not counted at all', async () => {
+        meteringSweepManager.findSessionUsage.mockResolvedValue([
+          { subject: 'user-1', sessionStart: startedAt, usage: 9 },
+        ]);
+
+        await service.sweep(params, NOW);
+
+        expect(usageCountersManager.writeSessions).toHaveBeenCalledTimes(1);
+      });
+
+      it('skips a detected session that has already ended', async () => {
+        meteringSweepManager.findNewSessionStarts.mockResolvedValue([
+          {
+            ...opened,
+            sessionStart: new Date(NOW.getTime() - durationMs),
+          },
+        ]);
+
+        await service.sweep(params, NOW);
+
+        expect(usageCountersManager.findSessionStarts).not.toHaveBeenCalled();
+      });
     });
   });
 

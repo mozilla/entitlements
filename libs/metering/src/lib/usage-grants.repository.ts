@@ -4,6 +4,7 @@
 
 import {
   type CollectionReference,
+  type DocumentData,
   type Timestamp,
 } from '@google-cloud/firestore';
 
@@ -46,29 +47,32 @@ export async function getUsageGrants(
   subject: string
 ): Promise<UsageGrantRecord[]> {
   const result = await db.where('subject', '==', subject).get();
-  return result.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      subject: data['subject'],
-      slug: data['slug'],
-      amount: data['amount'],
-      grantedBy: data['grantedBy'],
-      reason: data['reason'],
-      createdAt: data['createdAt'],
-      expiresAt: data['expiresAt'] ?? null,
-    };
-  });
+  return result.docs.map((doc) => toUsageGrantRecord(doc.id, doc.data()));
 }
 
 export async function deleteUsageGrant(
   db: CollectionReference,
   id: string
-): Promise<void> {
+): Promise<UsageGrantRecord> {
   const ref = db.doc(id);
   const snapshot = await ref.get();
-  if (!snapshot.exists) {
+  const data = snapshot.data();
+  if (!snapshot.exists || data === undefined) {
     throw new UsageGrantNotFoundError(id);
   }
   await ref.delete();
+  return toUsageGrantRecord(id, data);
+}
+
+function toUsageGrantRecord(id: string, data: DocumentData): UsageGrantRecord {
+  return {
+    id,
+    subject: data['subject'],
+    slug: data['slug'],
+    amount: data['amount'],
+    grantedBy: data['grantedBy'],
+    reason: data['reason'],
+    createdAt: data['createdAt'],
+    expiresAt: data['expiresAt'] ?? null,
+  };
 }

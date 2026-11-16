@@ -2,20 +2,29 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, type LoggerService } from '@nestjs/common';
 
-import { MeteringConfigurationManager } from '@entitlements/shared/cms';
+import {
+  MeteringConfigurationManager,
+  type MeteringWindow,
+} from '@entitlements/shared/cms';
+import {
+  StatsDService,
+  type StatsD,
+} from '@entitlements/shared/metrics/statsd';
 
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPublisherManager } from './metering-publisher.manager';
 import { MeteringSweepManager } from './metering-sweep.manager';
 import { TimestampOutOfRangeError } from './metering.error';
+import type { MeterSubjectKey, WindowUsage } from './metering.types';
 import { isTimestampInRange } from './utils/isTimestampInRange';
 import {
   type IngestUsageRequest,
   type UsageQueryParams,
   type UsageQueryResponse,
 } from './metering.schema';
+import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 import { requireMeterBySlug } from './utils/requireMeterBySlug';
 import { resolveWindow } from './utils/resolveWindow';
@@ -27,7 +36,10 @@ export class UsageService {
     private readonly meteringPublisherManager: MeteringPublisherManager,
     private readonly meteringEventsManager: MeteringEventsManager,
     private readonly meteringSweepManager: MeteringSweepManager,
-    private readonly usageGrantsManager: UsageGrantsManager
+    private readonly usageCountersManager: UsageCountersManager,
+    private readonly usageGrantsManager: UsageGrantsManager,
+    @Inject(StatsDService) private readonly statsd: StatsD,
+    @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   async ingestUsage(
@@ -67,30 +79,19 @@ export class UsageService {
       params.slug
     );
 
-    const sessionStart =
-      meter.window.kind === 'session'
-        ? await this.findSessionStart(clientId, params)
-        : undefined;
-    const { windowStart, windowEnd } = resolveWindow(
-      meter.window,
-      now,
-      sessionStart
-    );
-
-    const [usage, grantedAmount] = await Promise.all([
-      this.meteringEventsManager.sumUsage({
-        clientId,
-        slug: params.slug,
-        subject: params.subject,
-        from: windowStart,
-        to: windowEnd,
-      }),
-      this.usageGrantsManager.getActiveGrantedAmount(
-        params.subject,
-        params.slug,
-        now
-      ),
-    ]);
+    const [{ usage, windowStart, windowEnd }, grantedAmount] =
+      await Promise.all([
+        this.findWindowUsage(
+          { clientId, slug: params.slug, subject: params.subject },
+          meter.window,
+          now
+        ),
+        this.usageGrantsManager.getActiveGrantedAmount(
+          params.subject,
+          params.slug,
+          now
+        ),
+      ]);
 
     return {
       usage,
@@ -102,15 +103,56 @@ export class UsageService {
     };
   }
 
-  private async findSessionStart(
-    clientId: string,
-    params: UsageQueryParams
-  ): Promise<Date | undefined> {
-    const starts = await this.meteringSweepManager.findSessionStarts({
-      clientId,
-      slug: params.slug,
-      subjects: [params.subject],
+  private async findWindowUsage(
+    key: MeterSubjectKey,
+    window: MeteringWindow,
+    now: Date
+  ): Promise<WindowUsage> {
+    try {
+      const counted = await this.usageCountersManager.findWindowUsage(
+        key,
+        window,
+        now
+      );
+      if (counted) {
+        this.statsd.increment('metering.usage.source', { source: 'redis' });
+        return counted;
+      }
+      this.statsd.increment('metering.usage.source', {
+        source: 'clickhouse-not-populated',
+      });
+    } catch (err) {
+      this.statsd.increment('metering.usage.source', {
+        source: 'clickhouse-redis-error',
+      });
+      this.logger.error(err);
+    }
+    return this.findWindowUsageInClickHouse(key, window, now);
+  }
+
+  private async findWindowUsageInClickHouse(
+    key: MeterSubjectKey,
+    window: MeteringWindow,
+    now: Date
+  ): Promise<WindowUsage> {
+    const sessionStart =
+      window.kind === 'session' ? await this.findSessionStart(key) : undefined;
+    const bounds = resolveWindow(window, now, sessionStart);
+    const usage = await this.meteringEventsManager.sumUsage({
+      ...key,
+      from: bounds.windowStart,
+      to: bounds.windowEnd,
     });
-    return starts.get(params.subject);
+    return { ...bounds, usage };
+  }
+
+  private async findSessionStart(
+    key: MeterSubjectKey
+  ): Promise<Date | undefined> {
+    const starts = await this.meteringSweepManager.findSessionStarts(
+      { clientId: key.clientId, slug: key.slug, subjects: [key.subject] },
+      'usageFallback'
+    );
+    return starts.get(key.subject);
   }
 }

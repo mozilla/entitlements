@@ -36,7 +36,7 @@ export class MeteringRedisConfig {
 
   @IsString()
   @IsNotEmpty()
-  public readonly keyPrefix: string = 'metering:dedupe:';
+  public readonly keyPrefix: string = 'metering:';
 
   @Type(() => Number)
   @IsInt()
@@ -63,7 +63,7 @@ export const MockMeteringRedisConfig = {
   host: '127.0.0.1',
   port: 6379,
   tls: false,
-  keyPrefix: 'test-metering:dedupe:',
+  keyPrefix: 'test-metering:',
   claimTtlSeconds: 60,
   dedupeTtlSeconds: 90_000,
   connectTimeoutMs: 1_000,

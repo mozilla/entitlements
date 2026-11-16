@@ -14,4 +14,5 @@ export * from './lib/type-cachable-async-local-storage-init';
 export * from './lib/type-cachable-cache-first';
 export * from './lib/type-cachable-firestore-adapter';
 export * from './lib/type-cachable-memory-adapter';
+export * from './lib/type-cachable-redis-adapter';
 export * from './lib/type-cachable-stale-while-revalidate-with-fallback';

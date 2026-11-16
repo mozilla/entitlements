@@ -130,13 +130,13 @@ describe('MeteringMetricsService', () => {
       });
     });
 
-    it('counts the notifications sent within a sliding window', async () => {
+    it('counts the notifications sent within a sliding window that includes the current hour', async () => {
       meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
         utilFor(
           meter({
             windowKind: 'sliding',
             windowPeriod: null,
-            windowDurationMinutes: 60,
+            windowDurationMinutes: 120,
           })
         )
       );

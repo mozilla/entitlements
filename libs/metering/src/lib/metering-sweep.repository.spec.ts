@@ -133,6 +133,77 @@ describe('MeteringSweepRepository', () => {
     });
   });
 
+  describe('findSessionStarts', () => {
+    it('spends the shared read budget by default', async () => {
+      clickHouseClient.query.mockResolvedValue([]);
+
+      await repository.findSessionStarts({ ...scope, subjects: ['user-1'] });
+
+      expect(clickHouseClient.query.mock.calls[0][0].budget).toBe('read');
+    });
+
+    it('spends the budget the caller passes', async () => {
+      clickHouseClient.query.mockResolvedValue([]);
+
+      await repository.findSessionStarts(
+        { ...scope, subjects: ['user-1'] },
+        'usageFallback'
+      );
+
+      expect(clickHouseClient.query.mock.calls[0][0].budget).toBe(
+        'usageFallback'
+      );
+    });
+  });
+
+  describe('findSessionUsage', () => {
+    it('binds each session subject and start as parallel arrays', async () => {
+      clickHouseClient.query.mockResolvedValue([]);
+
+      await repository.findSessionUsage({
+        ...scope,
+        sessions: [
+          {
+            subject: 'user-1',
+            sessionStart: new Date('2026-05-15T09:00:00.000Z'),
+          },
+          {
+            subject: 'user-2',
+            sessionStart: new Date('2026-05-15T08:00:00.000Z'),
+          },
+        ],
+        to: new Date('2026-05-15T12:05:00.000Z'),
+      });
+
+      expect(clickHouseClient.query.mock.calls[0][0].params).toEqual({
+        clientId: 'vpn',
+        slug: 'tokens',
+        subjects: "['user-1','user-2']",
+        starts: "['2026-05-15 09:00:00.000','2026-05-15 08:00:00.000']",
+        earliestStart: '2026-05-15 08:00:00.000',
+        to: '2026-05-15 12:05:00.000',
+      });
+    });
+
+    it('counts only events at or after each session start', async () => {
+      clickHouseClient.query.mockResolvedValue([]);
+
+      await repository.findSessionUsage({
+        ...scope,
+        sessions: [
+          {
+            subject: 'user-1',
+            sessionStart: new Date('2026-05-15T09:00:00.000Z'),
+          },
+        ],
+        to: new Date('2026-05-15T12:05:00.000Z'),
+      });
+
+      const { sql } = clickHouseClient.query.mock.calls[0][0];
+      expect(sql).toContain('sumIf(e.amount, e.event_time >= d.started_at)');
+    });
+  });
+
   describe('findLastNotifications', () => {
     it('passes subjects as a bound ClickHouse array', async () => {
       clickHouseClient.query.mockResolvedValue([]);

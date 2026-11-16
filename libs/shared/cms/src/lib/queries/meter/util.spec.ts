@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { VError } from 'verror';
+
 import {
   METERING_CALENDAR_PERIODS,
   METERING_MAX_WINDOW_DURATION_MINUTES,
@@ -32,10 +34,43 @@ describe('toStrapiMeter', () => {
     const meter = StrapiMeterRawFactory({
       windowKind: 'sliding',
       windowPeriod: null,
-      windowDurationMinutes: 90,
+      windowDurationMinutes: 120,
     });
     expect(toStrapiMeter(meter).window).toEqual({
       kind: 'sliding',
+      durationMs: 120 * 60_000,
+    });
+  });
+
+  it('rejects a sliding meter whose duration is not a whole number of hours', () => {
+    const meter = StrapiMeterRawFactory({
+      windowKind: 'sliding',
+      windowPeriod: null,
+      windowDurationMinutes: 90,
+    });
+    expect.assertions(2);
+    try {
+      toStrapiMeter(meter);
+    } catch (err) {
+      expect(err).toBeInstanceOf(MeterInvalidWindowError);
+      if (err instanceof MeterInvalidWindowError) {
+        expect(VError.info(err)).toEqual({
+          slug: meter.slug,
+          reason:
+            'sliding meters need a windowDurationMinutes that is a multiple of 60, because usage is counted in hourly buckets',
+        });
+      }
+    }
+  });
+
+  it('accepts a session meter whose duration is not a whole number of hours', () => {
+    const meter = StrapiMeterRawFactory({
+      windowKind: 'session',
+      windowPeriod: null,
+      windowDurationMinutes: 90,
+    });
+    expect(toStrapiMeter(meter).window).toEqual({
+      kind: 'session',
       durationMs: 90 * 60_000,
     });
   });

@@ -3,6 +3,8 @@ import { IsDefined, IsIn, IsOptional, ValidateNested } from 'class-validator';
 import type { LogLevel } from '@nestjs/common';
 
 import { MeteringConfig } from '@entitlements/metering';
+import { StrapiClientConfig } from '@entitlements/shared/cms';
+import { FirestoreConfig } from '@entitlements/shared/db/firestore';
 import { StatsDConfig } from '@entitlements/shared/metrics/statsd';
 import { SentryConfig } from './sentry.config';
 
@@ -17,6 +19,11 @@ export const NEST_LOG_LEVELS: Record<string, LogLevel> = {
 };
 
 export class RootConfig {
+  @Type(() => FirestoreConfig)
+  @ValidateNested()
+  @IsDefined()
+  public readonly firestoreConfig!: Partial<FirestoreConfig>;
+
   @Type(() => StatsDConfig)
   @ValidateNested()
   @IsDefined()
@@ -26,6 +33,11 @@ export class RootConfig {
   @ValidateNested()
   @IsDefined()
   public readonly sentryConfig!: Partial<SentryConfig>;
+
+  @Type(() => StrapiClientConfig)
+  @ValidateNested()
+  @IsDefined()
+  public readonly strapiClientConfig!: Partial<StrapiClientConfig>;
 
   @Type(() => MeteringConfig)
   @ValidateNested()

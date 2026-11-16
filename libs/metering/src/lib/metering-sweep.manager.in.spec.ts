@@ -362,6 +362,64 @@ describeClickHouse('MeteringSweepManager against a real ClickHouse', () => {
     });
   });
 
+  describe('findSessionUsage', () => {
+    it('sums each subject from its own session start', async () => {
+      await events.insertEvents([
+        event('a-before', 'user-a', 100, at(-3 * HOUR_MS)),
+        event('a-inside', 'user-a', 5, at(-1 * HOUR_MS)),
+        event('b-inside', 'user-b', 7, at(-2.5 * HOUR_MS)),
+      ]);
+
+      const usage = await manager.findSessionUsage({
+        clientId: CLIENT_ID,
+        slug: SLUG,
+        sessions: [
+          { subject: 'user-a', sessionStart: at(-2 * HOUR_MS) },
+          { subject: 'user-b', sessionStart: at(-2.75 * HOUR_MS) },
+        ],
+        to: NOW,
+      });
+
+      expect(
+        usage.sort((left, right) => left.subject.localeCompare(right.subject))
+      ).toEqual([
+        { subject: 'user-a', sessionStart: at(-2 * HOUR_MS), usage: 5 },
+        { subject: 'user-b', sessionStart: at(-2.75 * HOUR_MS), usage: 7 },
+      ]);
+    });
+
+    it('returns zero usage for a session with no events yet', async () => {
+      await expect(
+        manager.findSessionUsage({
+          clientId: CLIENT_ID,
+          slug: SLUG,
+          sessions: [{ subject: 'user-a', sessionStart: at(-1 * HOUR_MS) }],
+          to: NOW,
+        })
+      ).resolves.toEqual([
+        { subject: 'user-a', sessionStart: at(-1 * HOUR_MS), usage: 0 },
+      ]);
+    });
+
+    it('does not count another client using the same meter and subject', async () => {
+      await events.insertEvents([
+        {
+          ...event('other-client', 'user-a', 50, at(-30 * 60 * 1000)),
+          clientId: 'relay',
+        },
+      ]);
+
+      const usage = await manager.findSessionUsage({
+        clientId: CLIENT_ID,
+        slug: SLUG,
+        sessions: [{ subject: 'user-a', sessionStart: at(-1 * HOUR_MS) }],
+        to: NOW,
+      });
+
+      expect(usage[0].usage).toBe(0);
+    });
+  });
+
   describe('watermark round-trip', () => {
     it('returns null before any sweep has run', async () => {
       await expect(

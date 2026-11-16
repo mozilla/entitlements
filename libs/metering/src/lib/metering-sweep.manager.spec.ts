@@ -26,6 +26,7 @@ describe('MeteringSweepManager', () => {
       | 'advanceWatermark'
       | 'recordNotifications'
       | 'recordSessionStarts'
+      | 'findSessionUsage'
     >
   >;
 
@@ -54,6 +55,7 @@ describe('MeteringSweepManager', () => {
       advanceWatermark: jest.fn().mockResolvedValue(undefined),
       recordNotifications: jest.fn().mockResolvedValue(undefined),
       recordSessionStarts: jest.fn().mockResolvedValue(undefined),
+      findSessionUsage: jest.fn().mockResolvedValue([]),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -229,6 +231,71 @@ describe('MeteringSweepManager', () => {
 
       expect(result.size).toBe(0);
       expect(meteringSweepRepository.findSessionStarts).not.toHaveBeenCalled();
+    });
+
+    it('reads from the shared read budget by default', async () => {
+      await manager.findSessionStarts({ ...scope, subjects: ['user-1'] });
+
+      expect(meteringSweepRepository.findSessionStarts).toHaveBeenCalledWith(
+        { ...scope, subjects: ['user-1'] },
+        'read'
+      );
+    });
+
+    it('passes a caller budget through to the repository', async () => {
+      await manager.findSessionStarts(
+        { ...scope, subjects: ['user-1'] },
+        'usageFallback'
+      );
+
+      expect(meteringSweepRepository.findSessionStarts).toHaveBeenCalledWith(
+        { ...scope, subjects: ['user-1'] },
+        'usageFallback'
+      );
+    });
+  });
+
+  describe('findSessionUsage', () => {
+    const sessionStart = new Date('2026-05-15T09:00:00.000Z');
+    const to = new Date('2026-05-15T12:05:00.000Z');
+
+    it('maps rows onto session usage', async () => {
+      meteringSweepRepository.findSessionUsage.mockResolvedValue([
+        {
+          subject: 'user-1',
+          started_at_iso: '2026-05-15T09:00:00.000Z',
+          usage: 9,
+        },
+      ]);
+
+      await expect(
+        manager.findSessionUsage({
+          ...scope,
+          sessions: [{ subject: 'user-1', sessionStart }],
+          to,
+        })
+      ).resolves.toEqual([{ subject: 'user-1', sessionStart, usage: 9 }]);
+    });
+
+    it('makes no query for an empty session list', async () => {
+      await expect(
+        manager.findSessionUsage({ ...scope, sessions: [], to })
+      ).resolves.toEqual([]);
+      expect(meteringSweepRepository.findSessionUsage).not.toHaveBeenCalled();
+    });
+
+    it('propagates a repository failure', async () => {
+      meteringSweepRepository.findSessionUsage.mockRejectedValue(
+        new ClickHouseError('query', new Error('timeout'))
+      );
+
+      await expect(
+        manager.findSessionUsage({
+          ...scope,
+          sessions: [{ subject: 'user-1', sessionStart }],
+          to,
+        })
+      ).rejects.toThrow(ClickHouseError);
     });
   });
 

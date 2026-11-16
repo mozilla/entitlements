@@ -158,5 +158,15 @@ describe('MeteringEventsRepository', () => {
         ClickHouseError
       );
     });
+
+    it('spends the usage fallback budget, not the shared read budget', async () => {
+      clickHouseClient.query.mockResolvedValue([{ usage: 0 }]);
+
+      await repository.sumUsage(sumUsageParams);
+
+      expect(clickHouseClient.query.mock.calls[0][0].budget).toBe(
+        'usageFallback'
+      );
+    });
   });
 });

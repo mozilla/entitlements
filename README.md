@@ -6,12 +6,12 @@ This is an [Nx](https://nx.dev) monorepo using pnpm and NestJS.
 
 ## Apps
 
-| App                   | Port | Purpose                                                                     |
-| --------------------- | ---- | --------------------------------------------------------------------------- |
-| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.      |
-| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes in Redis, writes to ClickHouse. |
-| `metering-sweep`      | n/a  | One pass over active meters that dispatches threshold webhooks, then exits. |
-| `metering-metrics`    | n/a  | One pass over swept meters that sends usage gauges to StatsD, then exits.   |
+| App                   | Port | Purpose                                                                                                  |
+| --------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
+| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                                   |
+| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse.     |
+| `metering-sweep`      | n/a  | One pass that rebuilds the Redis usage counters if needed and dispatches threshold webhooks, then exits. |
+| `metering-metrics`    | n/a  | One pass over swept meters that sends usage gauges to StatsD, then exits.                                |
 
 Shared code lives in `libs/`. The domain logic is in `libs/metering`.
 
