@@ -6,12 +6,14 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnApplicationBootstrap,
   OnModuleInit,
   type LoggerService,
 } from '@nestjs/common';
 import { LocksEvents, OnOneInstance, WithoutOverlapping } from '@nestjs/locks';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import * as Sentry from '@sentry/nestjs';
+import { CronTime } from 'cron';
 
 import {
   StatsDService,
@@ -20,12 +22,17 @@ import {
 
 import type { SchedulerJob, SchedulerRunOutcome } from './metering.types';
 import { MeteringMetricsService } from './metering-metrics.service';
+import { MeteringSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSweepService } from './metering-sweep.service';
 import { UsageRefillService } from './usage-refill.service';
 
 @Injectable()
-export class MeteringSchedulerService implements OnModuleInit {
+export class MeteringSchedulerService
+  implements OnModuleInit, OnApplicationBootstrap
+{
   constructor(
+    private readonly meteringSchedulerConfig: MeteringSchedulerConfig,
+    private readonly schedulerRegistry: SchedulerRegistry,
     private readonly locksEvents: LocksEvents,
     private readonly meteringSweepService: MeteringSweepService,
     private readonly meteringMetricsService: MeteringMetricsService,
@@ -53,7 +60,25 @@ export class MeteringSchedulerService implements OnModuleInit {
     });
   }
 
-  @Cron(CronExpression.EVERY_MINUTE, { name: 'sweep', waitForCompletion: true })
+  onApplicationBootstrap(): void {
+    const schedules: Record<SchedulerJob, string> = {
+      sweep: this.meteringSchedulerConfig.sweepCron,
+      metrics: this.meteringSchedulerConfig.metricsCron,
+    };
+    for (const [job, cron] of Object.entries(schedules)) {
+      const cronJob = this.schedulerRegistry.getCronJob(job);
+      cronJob.setTime(new CronTime(cron));
+      cronJob.start();
+      this.logger.log(`Scheduled ${job} on "${cron}"`, 'MeteringScheduler');
+    }
+  }
+
+  // Disabled until onApplicationBootstrap sets the schedule from MeteringSchedulerConfig.
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'sweep',
+    waitForCompletion: true,
+    disabled: true,
+  })
   @OnOneInstance({ key: 'sweep' })
   @WithoutOverlapping()
   async sweep(): Promise<void> {
@@ -71,6 +96,7 @@ export class MeteringSchedulerService implements OnModuleInit {
   @Cron(CronExpression.EVERY_5_MINUTES, {
     name: 'metrics',
     waitForCompletion: true,
+    disabled: true,
   })
   @OnOneInstance({ key: 'metrics' })
   @WithoutOverlapping()

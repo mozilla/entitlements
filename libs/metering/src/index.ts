@@ -15,6 +15,7 @@ export * from './lib/metering-firestore.provider';
 export * from './lib/metering-pubsub.config';
 export * from './lib/metering-pubsub.provider';
 export * from './lib/metering-redis.config';
+export * from './lib/metering-scheduler.config';
 export * from './lib/metering-sweep.config';
 export * from './lib/metering-usage-counters.config';
 

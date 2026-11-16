@@ -3,18 +3,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Logger } from '@nestjs/common';
-import type { DynamicModule, LoggerService } from '@nestjs/common';
+import type { LoggerService } from '@nestjs/common';
 import {
   InMemoryLockStore,
   LocksEvents,
   LocksModule,
   LocksStorage,
 } from '@nestjs/locks';
-import {
-  CronExpression,
-  ScheduleModule,
-  SchedulerRegistry,
-} from '@nestjs/schedule';
+import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Test, type TestingModule } from '@nestjs/testing';
 import * as Sentry from '@sentry/nestjs';
 
@@ -24,6 +20,7 @@ import {
 } from '@entitlements/shared/metrics/statsd';
 
 import { MeteringMetricsService } from './metering-metrics.service';
+import { MeteringSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
 import { MeteringSweepService } from './metering-sweep.service';
 import { UsageRefillService } from './usage-refill.service';
@@ -37,6 +34,10 @@ const SWEEP_RESULT: SweepAllResult = { total: 3, held: 1, failed: 0 };
 const METRICS_RESULT: MetricsReportAllResult = { total: 2, failed: 0 };
 const OTHER_INSTANCE = 'other-instance';
 const HELD_MS = 60_000;
+const NEVER_DURING_TESTS: MeteringSchedulerConfig = {
+  sweepCron: '0 0 1 1 *',
+  metricsCron: '0 0 1 1 *',
+};
 
 describe('MeteringSchedulerService', () => {
   let moduleRef: TestingModule;
@@ -48,11 +49,14 @@ describe('MeteringSchedulerService', () => {
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
   let logger: jest.Mocked<Pick<LoggerService, 'error' | 'log' | 'warn' | 'debug'>>;
 
-  async function start(imports: DynamicModule[] = []): Promise<void> {
+  async function start(
+    schedules: MeteringSchedulerConfig = NEVER_DURING_TESTS
+  ): Promise<void> {
     moduleRef = await Test.createTestingModule({
-      imports: [LocksModule.forRoot(), ...imports],
+      imports: [ScheduleModule.forRoot(), LocksModule.forRoot()],
       providers: [
         MeteringSchedulerService,
+        { provide: MeteringSchedulerConfig, useValue: schedules },
         { provide: MeteringSweepService, useValue: sweepService },
         { provide: MeteringMetricsService, useValue: metricsService },
         { provide: UsageRefillService, useValue: refillService },
@@ -82,17 +86,38 @@ describe('MeteringSchedulerService', () => {
   });
 
   describe('schedule registration', () => {
+    const CONFIGURED: MeteringSchedulerConfig = {
+      sweepCron: '0 0 1 1 *',
+      metricsCron: '0 0 1 2 *',
+    };
+
     beforeEach(async () => {
-      await start([ScheduleModule.forRoot()]);
+      await start(CONFIGURED);
     });
 
     it.each([
-      { job: 'sweep', cron: CronExpression.EVERY_MINUTE },
-      { job: 'metrics', cron: CronExpression.EVERY_5_MINUTES },
-    ])('registers the $job job to run on "$cron"', ({ job, cron }) => {
+      { job: 'sweep', cron: CONFIGURED.sweepCron },
+      { job: 'metrics', cron: CONFIGURED.metricsCron },
+    ])('schedules the $job job on its configured "$cron"', ({ job, cron }) => {
       const registry = moduleRef.get(SchedulerRegistry);
 
       expect(registry.getCronJob(job).cronTime.source).toBe(cron);
+    });
+
+    it.each(['sweep', 'metrics'])('starts the %s job', (job) => {
+      const registry = moduleRef.get(SchedulerRegistry);
+
+      expect(registry.getCronJob(job).isActive).toBe(true);
+    });
+
+    it.each([
+      { job: 'sweep', cron: CONFIGURED.sweepCron },
+      { job: 'metrics', cron: CONFIGURED.metricsCron },
+    ])('logs the $job schedule', ({ job, cron }) => {
+      expect(logger.log).toHaveBeenCalledWith(
+        `Scheduled ${job} on "${cron}"`,
+        'MeteringScheduler'
+      );
     });
   });
 

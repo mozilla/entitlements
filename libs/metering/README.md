@@ -12,7 +12,7 @@ Run `nx test-integration metering`. The `*.in.spec.ts` suites need ClickHouse an
 
 ## Running the threshold sweep
 
-Every minute, `metering-scheduler` does one pass over every active meter. `@nestjs/locks` runs it on one scheduler instance at a time, with its locks in Redis.
+`metering-scheduler` does one pass over every active meter on `METERING_SCHEDULER_CONFIG__SWEEP_CRON`, every minute by default. `@nestjs/locks` runs it on one scheduler instance at a time, with its locks in Redis.
 
 ## Usage counters in Redis
 
@@ -26,4 +26,4 @@ Sliding windows are counted in whole hours, so their duration must be a multiple
 
 ## Running the metrics job
 
-Every 5 minutes, `metering-scheduler` sends usage gauges for every meter the sweep has seen. For each meter it reports the limit, the subjects with usage today (UTC), and the subjects notified at each threshold in the current window.
+`metering-scheduler` sends usage gauges for every meter the sweep has seen on `METERING_SCHEDULER_CONFIG__METRICS_CRON`, every 5 minutes by default. For each meter it reports the limit, the subjects with usage today (UTC), and the subjects notified at each threshold in the current window.
