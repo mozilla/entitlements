@@ -37,8 +37,7 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
 - **Apps (`apps/*`):**
   - `api`: HTTP API on port 3037. Usage ingest and query, usage grants, heartbeat and version endpoints, Swagger.
   - `metering-subscriber`: Pub/Sub consumer on port 3038 that dedupes events in Redis and writes them to ClickHouse. Only serves heartbeat endpoints over HTTP.
-  - `metering-sweep`: one-shot job that checks meter thresholds and dispatches webhooks, then exits. Runs as a CronJob in production.
-  - `metering-metrics`: one-shot job that sends usage gauges for each swept meter to StatsD, then exits. Runs as a CronJob every 5 minutes in production.
+  - `metering-scheduler`: long-running process on port 3039 that runs the threshold sweep (dispatching webhooks) and the metrics job (usage gauges to StatsD) on cron schedules, each behind a Redis lease. Only serves heartbeat endpoints over HTTP.
 
 - **Libraries (`libs/*`):**
   - `libs/metering`: all metering domain logic, controllers, ClickHouse client, and ClickHouse migrations.
@@ -62,7 +61,7 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
 _Note:_ For authoritative targets, check each project's **`project.json`**.
 
 - **Install:** `pnpm install`
-- **Everything (Docker):** `./dev.sh up`. Builds the dev image, starts ClickHouse, Redis, and the Firebase emulators (Firestore and Pub/Sub), runs ClickHouse migrations, then starts all four apps with watch-mode rebuilds.
+- **Everything (Docker):** `./dev.sh up`. Builds the dev image, starts ClickHouse, Redis, and the Firebase emulators (Firestore and Pub/Sub), runs ClickHouse migrations, then starts all three apps with watch-mode rebuilds.
 - **Infrastructure only (for integration tests):** `./dev.sh infra`
 - **Logs / status:** `./dev.sh logs-apps`, `./dev.sh logs-infra`, `./dev.sh ps`. Run `./dev.sh` with no arguments for every command.
 - **Strapi:** not part of the compose stack. Point `STRAPI_CLIENT_CONFIG__GRAPHQL_API_URI` and `STRAPI_CLIENT_CONFIG__API_KEY` at a Strapi instance in `dev.local.env`.

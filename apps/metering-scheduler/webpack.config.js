@@ -3,7 +3,7 @@ const { join } = require('path');
 
 module.exports = {
   output: {
-    path: join(__dirname, '../../dist/apps/metering-metrics'),
+    path: join(__dirname, '../../dist/apps/metering-scheduler'),
     ...(process.env.NODE_ENV !== 'production' && {
       devtoolModuleFilenameTemplate: '[absolute-resource-path]',
     }),
@@ -15,6 +15,7 @@ module.exports = {
       main: './src/main.ts',
       tsConfig: './tsconfig.app.json',
       assets: [
+        './src/assets',
         { input: '../../config', glob: 'version.json', output: './config' },
       ],
       optimization: false,

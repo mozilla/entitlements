@@ -71,6 +71,20 @@ export interface MeteringRedis {
   disconnect(): void;
 }
 
+export interface LockStoreRedis {
+  eval(
+    script: string,
+    numKeys: number,
+    ...args: Array<string | number>
+  ): Promise<unknown>;
+  quit(): Promise<'OK'>;
+  disconnect(): void;
+}
+
+export type SchedulerJob = 'sweep' | 'metrics';
+
+export type SchedulerRunOutcome = 'ok' | 'failed';
+
 export interface ClickHouseRateLimiters {
   read: RateLimiterAbstract;
   write: RateLimiterAbstract;

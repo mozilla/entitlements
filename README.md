@@ -10,8 +10,7 @@ This is an [Nx](https://nx.dev) monorepo using pnpm and NestJS.
 | --------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
 | `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                                   |
 | `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse.     |
-| `metering-sweep`      | n/a  | One pass that rebuilds the Redis usage counters if needed and dispatches threshold webhooks, then exits. |
-| `metering-metrics`    | n/a  | One pass over swept meters that sends usage gauges to StatsD, then exits.                                |
+| `metering-scheduler`  | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks; sends gauges to StatsD.       |
 
 Shared code lives in `libs/`. The domain logic is in `libs/metering`.
 
@@ -33,7 +32,7 @@ pnpm install
 ./dev.sh up
 ```
 
-`./dev.sh up` builds the dev image and starts ClickHouse, Redis, and the Firebase emulators for Firestore and Pub/Sub. It then runs the ClickHouse migrations and starts all four apps. The api and subscriber rebuild on file changes, the sweep runs every 60 seconds, and the metrics job runs every 5 minutes.
+`./dev.sh up` builds the dev image and starts ClickHouse, Redis, and the Firebase emulators for Firestore and Pub/Sub. It then runs the ClickHouse migrations and starts all three apps with watch-mode rebuilds. The scheduler runs the sweep every minute and the metrics job every 5 minutes.
 
 Run `./dev.sh` with no arguments to list every command. The common ones:
 
@@ -81,7 +80,6 @@ docker build -f Dockerfile.production \
 
 docker run entitlements node dist/apps/api/main.js
 docker run entitlements node dist/apps/metering-subscriber/main.js
-docker run entitlements node dist/apps/metering-sweep/main.js
-docker run entitlements node dist/apps/metering-metrics/main.js
+docker run entitlements node dist/apps/metering-scheduler/main.js
 docker run entitlements node libs/metering/migrations/clickhouse/migrate.mjs
 ```
