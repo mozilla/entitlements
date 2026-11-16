@@ -5,13 +5,13 @@
 import { Provider } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { RedisLockStoreClient } from '@entitlements/shared/locks';
+
 import { METERING_LOCKS_KEY_PREFIX } from './metering.constants';
 import { MeteringRedisConfig } from './metering-redis.config';
 
-export const MeteringLockRedisClient = Symbol('METERING_LOCK_REDIS_CLIENT');
-
 export const MeteringLockRedisClientProvider: Provider<Redis.Redis> = {
-  provide: MeteringLockRedisClient,
+  provide: RedisLockStoreClient,
   useFactory: (config: MeteringRedisConfig) => {
     return new Redis({
       host: config.host,

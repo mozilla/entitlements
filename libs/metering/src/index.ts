@@ -27,7 +27,6 @@ export * from './lib/clickhouse-rate-limiter.provider';
 export * from './lib/metering-events.manager';
 export * from './lib/metering-events.repository';
 export * from './lib/metering-lock.provider';
-export * from './lib/metering-lock.store';
 export * from './lib/metering-metrics.manager';
 export * from './lib/metering-metrics.repository';
 export * from './lib/metering-metrics.service';

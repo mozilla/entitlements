@@ -13,7 +13,6 @@ import {
   ClickHouseRateLimitersProvider,
   MeteringFirestoreProvider,
   MeteringLockRedisClientProvider,
-  MeteringLockStore,
   MeteringMetricsManager,
   MeteringMetricsRepository,
   MeteringMetricsService,
@@ -34,6 +33,7 @@ import {
   StrapiClient,
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
+import { RedisLockStore } from '@entitlements/shared/locks';
 import {
   StatsDProvider,
   StatsDService,
@@ -65,7 +65,7 @@ import { AppService } from './app.service';
     MeteringConfigurationManager,
     MeteringFirestoreProvider,
     MeteringLockRedisClientProvider,
-    MeteringLockStore,
+    RedisLockStore,
     MeteringMetricsManager,
     MeteringMetricsRepository,
     MeteringMetricsService,

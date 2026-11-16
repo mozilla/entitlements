@@ -9,8 +9,10 @@ import {
   type LockStore,
 } from '@nestjs/locks';
 
-import { MeteringLockRedisClient } from './metering-lock.provider';
-import type { LockStoreRedis } from './metering.types';
+import {
+  RedisLockStoreClient,
+  type RedisLockStoreRedis,
+} from './redis-lock-store.client';
 
 const ACQUIRE_SCRIPT = `
 if redis.call('EXISTS', KEYS[1]) == 1 then
@@ -36,9 +38,9 @@ const lockKey = (key: string) => `lock:${key}`;
 const fenceKey = (key: string) => `fence:${key}`;
 
 @Injectable()
-export class MeteringLockStore implements LockStore, OnApplicationShutdown {
+export class RedisLockStore implements LockStore, OnApplicationShutdown {
   constructor(
-    @Inject(MeteringLockRedisClient) private readonly redis: LockStoreRedis,
+    @Inject(RedisLockStoreClient) private readonly redis: RedisLockStoreRedis,
     storage: LocksStorage
   ) {
     storage.registerSource(this);

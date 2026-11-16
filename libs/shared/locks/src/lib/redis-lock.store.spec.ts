@@ -4,17 +4,17 @@
 
 import { LocksStorage } from '@nestjs/locks';
 
-import { MeteringLockStore } from './metering-lock.store';
-import type { LockStoreRedis } from './metering.types';
+import { RedisLockStore } from './redis-lock.store';
+import type { RedisLockStoreRedis } from './redis-lock-store.client';
 
 const KEY = 'sweep:owner';
 const OWNER = 'owner-a';
 const TTL_MS = 30_000;
 
-describe('MeteringLockStore', () => {
-  let redis: jest.Mocked<LockStoreRedis>;
+describe('RedisLockStore', () => {
+  let redis: jest.Mocked<RedisLockStoreRedis>;
   let storage: LocksStorage;
-  let store: MeteringLockStore;
+  let store: RedisLockStore;
 
   beforeEach(() => {
     redis = {
@@ -23,7 +23,7 @@ describe('MeteringLockStore', () => {
       disconnect: jest.fn(),
     };
     storage = new LocksStorage();
-    store = new MeteringLockStore(redis, storage);
+    store = new RedisLockStore(redis, storage);
   });
 
   it('registers itself as the lock store', () => {

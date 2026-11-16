@@ -6,14 +6,14 @@ import { LocksStorage } from '@nestjs/locks';
 import { lockStoreContract } from '@nestjs/locks/testing';
 import Redis from 'ioredis';
 
-import { MeteringLockStore } from './metering-lock.store';
+import { RedisLockStore } from './redis-lock.store';
 
 const REDIS_HOST = process.env['REDIS_TEST_HOST'] ?? 'localhost';
 const REDIS_PORT = Number(process.env['REDIS_TEST_PORT'] ?? 6379);
-const KEY_PREFIX = 'test-metering:locks:';
+const KEY_PREFIX = 'test-shared:locks:';
 const CONTRACT_TIMEOUT_MS = 60_000;
 
-describe('MeteringLockStore against a real Redis', () => {
+describe('RedisLockStore against a real Redis', () => {
   let prefixed: Redis.Redis;
   let raw: Redis.Redis;
 
@@ -41,7 +41,7 @@ describe('MeteringLockStore against a real Redis', () => {
   });
 
   const cases = lockStoreContract(
-    () => new MeteringLockStore(prefixed, new LocksStorage()),
+    () => new RedisLockStore(prefixed, new LocksStorage()),
     { concurrent: true }
   );
 
