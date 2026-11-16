@@ -77,6 +77,6 @@ export class AppModule implements NestModule {
         { path: '__lbheartbeat__', method: RequestMethod.GET },
         { path: '__version__', method: RequestMethod.GET }
       )
-      .forRoutes('*');
+      .forRoutes('{*splat}');
   }
 }
