@@ -20,5 +20,3 @@ export const MIN_DEDUPE_TTL_SECONDS =
   (MAX_TIMESTAMP_PAST_MS + MAX_TIMESTAMP_FUTURE_MS) / 1000;
 
 export const CATCH_UP_SLICE_MS = 60 * 60 * 1000;
-
-export const METERING_LOCKS_KEY_PREFIX = 'metering:locks:';

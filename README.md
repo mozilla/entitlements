@@ -6,11 +6,11 @@ This is an [Nx](https://nx.dev) monorepo using pnpm and NestJS.
 
 ## Apps
 
-| App                   | Port | Purpose                                                                                                  |
-| --------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
-| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                                   |
-| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse.     |
-| `metering-scheduler`  | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks; sends gauges to StatsD.       |
+| App                   | Port | Purpose                                                                                              |
+| --------------------- | ---- | ---------------------------------------------------------------------------------------------------- |
+| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                               |
+| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse. |
+| `metering-scheduler`  | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks; sends gauges to StatsD.   |
 
 Shared code lives in `libs/`. The domain logic is in `libs/metering`.
 
@@ -64,7 +64,7 @@ The `local-rp` client in `dev.env` authenticates metering requests locally with 
 pnpm nx run-many -t lint
 pnpm nx run-many -t typecheck
 pnpm nx test-unit metering
-pnpm nx test-integration metering           # needs ./dev.sh infra
+pnpm nx run-many -t test-integration       # needs ./dev.sh infra
 pnpm jest -c libs/metering/jest.config.ts libs/metering/src/lib/usage.service.spec.ts
 pnpm nx run shared-cms:codegen              # needs Strapi credentials
 ```

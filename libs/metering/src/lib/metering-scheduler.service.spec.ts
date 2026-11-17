@@ -47,7 +47,9 @@ describe('MeteringSchedulerService', () => {
   let metricsService: jest.Mocked<Pick<MeteringMetricsService, 'reportAll'>>;
   let refillService: jest.Mocked<Pick<UsageRefillService, 'refillIfNeeded'>>;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
-  let logger: jest.Mocked<Pick<LoggerService, 'error' | 'log' | 'warn' | 'debug'>>;
+  let logger: jest.Mocked<
+    Pick<LoggerService, 'error' | 'log' | 'warn' | 'debug'>
+  >;
 
   async function start(
     schedules: MeteringSchedulerConfig = NEVER_DURING_TESTS
@@ -78,7 +80,12 @@ describe('MeteringSchedulerService', () => {
     };
     refillService = { refillIfNeeded: jest.fn().mockResolvedValue('checked') };
     statsd = { increment: jest.fn() };
-    logger = { error: jest.fn(), log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+    logger = {
+      error: jest.fn(),
+      log: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    };
   });
 
   afterEach(async () => {
@@ -185,7 +192,11 @@ describe('MeteringSchedulerService', () => {
     it('keeps the sweep lease after the run', async () => {
       await service.sweep();
 
-      expect(store.peek('sweep:owner')).toBeDefined();
+      expect(store.peek('sweep:owner')).toEqual({
+        owner: expect.any(String),
+        fencingToken: 1,
+        expiresAt: expect.any(Number),
+      });
     });
 
     it('releases the sweep run lock after the run', async () => {
@@ -288,7 +299,7 @@ describe('MeteringSchedulerService', () => {
           .mockRejectedValue(new Error('ECONNREFUSED'));
       });
 
-      it('rejects without running', async () => {
+      it('rejects with the lock store error', async () => {
         await expect(service.sweep()).rejects.toThrow(
           'the lock store failed (ECONNREFUSED)'
         );
@@ -334,7 +345,7 @@ describe('MeteringSchedulerService', () => {
       await start();
     });
 
-    it('reports metrics for every swept meter', async () => {
+    it('runs the metrics report', async () => {
       await service.reportMetrics();
 
       expect(metricsService.reportAll).toHaveBeenCalledTimes(1);
@@ -375,23 +386,109 @@ describe('MeteringSchedulerService', () => {
       });
     });
 
-    it('does not report when another instance owns the job', async () => {
-      await store.acquire('metrics:owner', OTHER_INSTANCE, HELD_MS);
+    describe('when another instance owns the metrics job', () => {
+      beforeEach(async () => {
+        await store.acquire('metrics:owner', OTHER_INSTANCE, HELD_MS);
+      });
 
-      await service.reportMetrics();
+      it('does not report', async () => {
+        await service.reportMetrics();
 
-      expect(metricsService.reportAll).not.toHaveBeenCalled();
+        expect(metricsService.reportAll).not.toHaveBeenCalled();
+      });
+
+      it('counts the run as skipped', async () => {
+        await service.reportMetrics();
+
+        expect(statsd.increment).toHaveBeenCalledWith(
+          'metering.scheduler.skipped',
+          { job: 'metrics', reason: 'ownership-unavailable' }
+        );
+      });
     });
 
-    it('counts a thrown report as an error', async () => {
-      metricsService.reportAll.mockRejectedValue(new Error('timeout'));
-
-      await service.reportMetrics().catch(() => undefined);
-
-      expect(statsd.increment).toHaveBeenCalledWith('metering.scheduler.run', {
-        job: 'metrics',
-        outcome: 'error',
+    describe('when a report is still running on another instance', () => {
+      beforeEach(async () => {
+        await store.acquire('metrics', OTHER_INSTANCE, HELD_MS);
       });
+
+      it('does not report', async () => {
+        await service.reportMetrics();
+
+        expect(metricsService.reportAll).not.toHaveBeenCalled();
+      });
+
+      it('counts the run as skipped', async () => {
+        await service.reportMetrics();
+
+        expect(statsd.increment).toHaveBeenCalledWith(
+          'metering.scheduler.skipped',
+          { job: 'metrics', reason: 'run-lock-unavailable' }
+        );
+      });
+    });
+
+    describe('when the lock store fails', () => {
+      beforeEach(() => {
+        jest
+          .spyOn(store, 'acquire')
+          .mockRejectedValue(new Error('ECONNREFUSED'));
+      });
+
+      it('rejects with the lock store error', async () => {
+        await expect(service.reportMetrics()).rejects.toThrow(
+          'the lock store failed (ECONNREFUSED)'
+        );
+      });
+
+      it('does not report', async () => {
+        await service.reportMetrics().catch(() => undefined);
+
+        expect(metricsService.reportAll).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the report throws', () => {
+      const failure = new Error('timeout');
+
+      beforeEach(() => {
+        metricsService.reportAll.mockRejectedValue(failure);
+      });
+
+      it('rethrows the error', async () => {
+        await expect(service.reportMetrics()).rejects.toBe(failure);
+      });
+
+      it('counts the run as an error', async () => {
+        await service.reportMetrics().catch(() => undefined);
+
+        expect(statsd.increment).toHaveBeenCalledWith(
+          'metering.scheduler.run',
+          { job: 'metrics', outcome: 'error' }
+        );
+      });
+
+      it('releases the metrics run lock', async () => {
+        await service.reportMetrics().catch(() => undefined);
+
+        expect(store.peek('metrics')).toBeUndefined();
+      });
+    });
+  });
+
+  describe('lock events', () => {
+    beforeEach(async () => {
+      await start();
+    });
+
+    it('ignores events other than a lost lock', () => {
+      moduleRef.get(LocksEvents).emit({
+        type: 'leadership-acquired',
+        key: 'sweep:owner',
+        fencingToken: 7,
+      });
+
+      expect(statsd.increment).not.toHaveBeenCalled();
     });
   });
 

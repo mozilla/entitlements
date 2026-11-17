@@ -89,11 +89,14 @@ describe('RedisLockStore', () => {
     it.each([
       { reply: 1, renewed: true },
       { reply: 0, renewed: false },
-    ])('returns $renewed when Redis replies $reply', async ({ reply, renewed }) => {
-      redis.eval.mockResolvedValue(reply);
+    ])(
+      'returns $renewed when Redis replies $reply',
+      async ({ reply, renewed }) => {
+        redis.eval.mockResolvedValue(reply);
 
-      await expect(store.renew(KEY, OWNER, TTL_MS)).resolves.toBe(renewed);
-    });
+        await expect(store.renew(KEY, OWNER, TTL_MS)).resolves.toBe(renewed);
+      }
+    );
   });
 
   describe('release', () => {
@@ -113,11 +116,14 @@ describe('RedisLockStore', () => {
     it.each([
       { reply: 1, released: true },
       { reply: 0, released: false },
-    ])('returns $released when Redis replies $reply', async ({ reply, released }) => {
-      redis.eval.mockResolvedValue(reply);
+    ])(
+      'returns $released when Redis replies $reply',
+      async ({ reply, released }) => {
+        redis.eval.mockResolvedValue(reply);
 
-      await expect(store.release(KEY, OWNER)).resolves.toBe(released);
-    });
+        await expect(store.release(KEY, OWNER)).resolves.toBe(released);
+      }
+    );
   });
 
   describe('shutdown', () => {

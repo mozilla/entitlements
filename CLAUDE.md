@@ -42,7 +42,7 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
 - **Libraries (`libs/*`):**
   - `libs/metering`: all metering domain logic, controllers, ClickHouse client, and ClickHouse migrations.
   - `libs/shared/cms`: Strapi GraphQL client with memory and Firestore caching, and the meter configuration query.
-  - `libs/shared/*`: StatsD, Firestore, type-cacheable adapters, base errors, Sentry setup, and NestJS API helpers.
+  - `libs/shared/*`: StatsD, Firestore, type-cacheable adapters, the Redis lock store, base errors, Sentry setup, and NestJS API helpers.
 
 - **Conventions:**
   - **Imports:** use `@entitlements/<path>` aliases from `tsconfig.base.json` (e.g., `@entitlements/shared/error`); avoid deep relative imports across library boundaries.
@@ -65,7 +65,7 @@ _Note:_ For authoritative targets, check each project's **`project.json`**.
 - **Infrastructure only (for integration tests):** `./dev.sh infra`
 - **Logs / status:** `./dev.sh logs-apps`, `./dev.sh logs-infra`, `./dev.sh ps`. Run `./dev.sh` with no arguments for every command.
 - **Strapi:** not part of the compose stack. Point `STRAPI_CLIENT_CONFIG__GRAPHQL_API_URI` and `STRAPI_CLIENT_CONFIG__API_KEY` at a Strapi instance in `dev.local.env`.
-- **Nx:** `nx build <app>`, `nx lint <project>`, `nx typecheck <project>`, `nx test-unit <project>`, `nx test-integration metering`, `nx serve <app>`
+- **Nx:** `nx build <app>`, `nx lint <project>`, `nx typecheck <project>`, `nx test-unit <project>`, `nx run-many -t test-integration`, `nx serve <app>`
 - **Single test file:** `pnpm jest -c <project>/jest.config.ts <path/to/file.spec.ts>`
 - **ClickHouse migrations:** `./dev.sh migrate`, or `nx run metering:migrate-clickhouse` against the env-configured server.
 - **Production image:** `docker build -f Dockerfile.production .`. The image has no default command; deployments run `node dist/apps/<app>/main.js`.

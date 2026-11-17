@@ -2,7 +2,10 @@ import { Type } from 'class-transformer';
 import { IsDefined, IsIn, IsOptional, ValidateNested } from 'class-validator';
 import type { LogLevel } from '@nestjs/common';
 
-import { MeteringConfig, MeteringSchedulerConfig } from '@entitlements/metering';
+import {
+  MeteringConfig,
+  MeteringSchedulerConfig,
+} from '@entitlements/metering';
 import { StrapiClientConfig } from '@entitlements/shared/cms';
 import { FirestoreConfig } from '@entitlements/shared/db/firestore';
 import { StatsDConfig } from '@entitlements/shared/metrics/statsd';

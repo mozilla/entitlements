@@ -3,25 +3,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Provider } from '@nestjs/common';
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
 
 import { RedisLockStoreClient } from '@entitlements/shared/locks';
 
-import { METERING_LOCKS_KEY_PREFIX } from './metering.constants';
 import { MeteringRedisConfig } from './metering-redis.config';
+import { createMeteringRedis } from './metering-redis.provider';
 
 export const MeteringLockRedisClientProvider: Provider<Redis.Redis> = {
   provide: RedisLockStoreClient,
-  useFactory: (config: MeteringRedisConfig) => {
-    return new Redis({
-      host: config.host,
-      port: config.port,
-      password: config.password,
-      keyPrefix: METERING_LOCKS_KEY_PREFIX,
-      connectTimeout: config.connectTimeoutMs,
-      commandTimeout: config.commandTimeoutMs,
-      ...(config.tls ? { tls: {} } : {}),
-    });
-  },
+  useFactory: (config: MeteringRedisConfig) =>
+    createMeteringRedis(config, `${config.keyPrefix}locks:`),
   inject: [MeteringRedisConfig],
 };

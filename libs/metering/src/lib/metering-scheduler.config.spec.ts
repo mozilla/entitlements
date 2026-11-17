@@ -44,7 +44,11 @@ describe('MeteringSchedulerConfig', () => {
       metricsCron: '0 * * * *',
     });
 
-    expect({ errors, sweepCron: config.sweepCron, metricsCron: config.metricsCron }).toEqual({
+    expect({
+      errors,
+      sweepCron: config.sweepCron,
+      metricsCron: config.metricsCron,
+    }).toEqual({
       errors: [],
       sweepCron: '*/2 * * * *',
       metricsCron: '0 * * * *',

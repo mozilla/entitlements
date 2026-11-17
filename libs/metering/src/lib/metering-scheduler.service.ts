@@ -26,6 +26,8 @@ import { MeteringSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSweepService } from './metering-sweep.service';
 import { UsageRefillService } from './usage-refill.service';
 
+const SCHEDULED_AT_BOOTSTRAP = CronExpression.EVERY_YEAR;
+
 @Injectable()
 export class MeteringSchedulerService
   implements OnModuleInit, OnApplicationBootstrap
@@ -73,8 +75,7 @@ export class MeteringSchedulerService
     }
   }
 
-  // Disabled until onApplicationBootstrap sets the schedule from MeteringSchedulerConfig.
-  @Cron(CronExpression.EVERY_MINUTE, {
+  @Cron(SCHEDULED_AT_BOOTSTRAP, {
     name: 'sweep',
     waitForCompletion: true,
     disabled: true,
@@ -93,7 +94,7 @@ export class MeteringSchedulerService
     });
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES, {
+  @Cron(SCHEDULED_AT_BOOTSTRAP, {
     name: 'metrics',
     waitForCompletion: true,
     disabled: true,
