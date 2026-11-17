@@ -12,22 +12,36 @@ import { ClickHouseRateLimiters } from './metering.types';
 
 export const ClickHouseRateLimitersToken = Symbol('CLICKHOUSE_RATE_LIMITERS');
 
+export async function connectRateLimiterStore(
+  redisConfig: MeteringRedisConfig
+): Promise<Redis.Redis> {
+  const storeClient = new Redis({
+    host: redisConfig.host,
+    port: redisConfig.port,
+    password: redisConfig.password,
+    connectTimeout: redisConfig.connectTimeoutMs,
+    commandTimeout: redisConfig.commandTimeoutMs,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+    ...(redisConfig.tls ? { tls: {} } : {}),
+  });
+  try {
+    await storeClient.connect();
+  } catch (err) {
+    storeClient.disconnect();
+    throw err;
+  }
+  return storeClient;
+}
+
 export const ClickHouseRateLimitersProvider: Provider<ClickHouseRateLimiters> =
   {
     provide: ClickHouseRateLimitersToken,
-    useFactory: (
+    useFactory: async (
       redisConfig: MeteringRedisConfig,
       clickHouseConfig: ClickHouseConfig
     ) => {
-      const storeClient = new Redis({
-        host: redisConfig.host,
-        port: redisConfig.port,
-        password: redisConfig.password,
-        connectTimeout: redisConfig.connectTimeoutMs,
-        commandTimeout: redisConfig.commandTimeoutMs,
-        enableOfflineQueue: false,
-        ...(redisConfig.tls ? { tls: {} } : {}),
-      });
+      const storeClient = await connectRateLimiterStore(redisConfig);
       const sharedLimiter = (keyPrefix: string, points: number) =>
         new RateLimiterRedis({
           storeClient,

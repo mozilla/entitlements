@@ -10,13 +10,21 @@ import { z } from 'zod';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';
 
+import { connectRateLimiterStore } from './clickhouse-rate-limiter.provider';
 import { ClickHouseClient } from './clickhouse.client';
+import { MockMeteringRedisConfig } from './metering-redis.config';
 import { INTEGRATION_CLICKHOUSE_CONFIG } from '../testing';
 import { ClickHouseRateLimitError } from './metering.error';
 
 const REDIS_HOST = process.env['REDIS_TEST_HOST'] ?? 'localhost';
 const REDIS_PORT = Number(process.env['REDIS_TEST_PORT'] ?? 6379);
+const UNREACHABLE_REDIS_PORT = 1;
 const KEY_PREFIX = 'test-metering:clickhouse:';
+const REDIS_CONFIG = {
+  ...MockMeteringRedisConfig,
+  host: REDIS_HOST,
+  port: REDIS_PORT,
+};
 
 const rowSchema = z.object({ one: z.number() });
 
@@ -32,13 +40,8 @@ describe('ClickHouse rate limiters against a real Redis', () => {
   }
 
   async function buildPod(): Promise<ClickHouseClient> {
-    const storeClient = new Redis({
-      host: REDIS_HOST,
-      port: REDIS_PORT,
-      enableOfflineQueue: false,
-    });
+    const storeClient = await connectRateLimiterStore(REDIS_CONFIG);
     storeClients.push(storeClient);
-    await new Promise((resolve) => storeClient.once('ready', resolve));
     return new ClickHouseClient(
       INTEGRATION_CLICKHOUSE_CONFIG,
       new StatsD({ mock: true }),
@@ -83,6 +86,23 @@ describe('ClickHouse rate limiters against a real Redis', () => {
   afterAll(async () => {
     await deleteTestKeys();
     await raw.quit();
+  });
+
+  it('runs a query as soon as the store connects', async () => {
+    const pod = await buildPod();
+
+    await expect(
+      pod.query({ sql: 'SELECT 1 AS one', rowSchema })
+    ).resolves.toEqual([{ one: 1 }]);
+  });
+
+  it('rejects the connection when Redis is unreachable', async () => {
+    await expect(
+      connectRateLimiterStore({
+        ...REDIS_CONFIG,
+        port: UNREACHABLE_REDIS_PORT,
+      })
+    ).rejects.toThrow(Error);
   });
 
   it('rejects a query once two pods together spend the read budget', async () => {
