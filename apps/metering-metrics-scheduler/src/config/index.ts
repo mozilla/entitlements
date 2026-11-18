@@ -4,7 +4,7 @@ import type { LogLevel } from '@nestjs/common';
 
 import {
   MeteringConfig,
-  MeteringSchedulerConfig,
+  MeteringMetricsSchedulerConfig,
 } from '@entitlements/metering';
 import { StrapiClientConfig } from '@entitlements/shared/cms';
 import { FirestoreConfig } from '@entitlements/shared/db/firestore';
@@ -47,10 +47,10 @@ export class RootConfig {
   @IsDefined()
   public readonly meteringConfig!: Partial<MeteringConfig>;
 
-  @Type(() => MeteringSchedulerConfig)
+  @Type(() => MeteringMetricsSchedulerConfig)
   @ValidateNested()
-  public readonly meteringSchedulerConfig: MeteringSchedulerConfig =
-    new MeteringSchedulerConfig();
+  public readonly meteringMetricsSchedulerConfig: MeteringMetricsSchedulerConfig =
+    new MeteringMetricsSchedulerConfig();
 
   @IsOptional()
   @IsIn(Object.keys(NEST_LOG_LEVELS))

@@ -60,13 +60,28 @@ services:
       redis:
         condition: service_started
 
-  metering-scheduler:
+  metering-sweep-scheduler:
     <<: *app
-    command: pnpm nx serve metering-scheduler
+    command: pnpm nx serve metering-sweep-scheduler
     environment:
       PORT: 3039
     ports:
       - '3039:3039'
+    depends_on:
+      clickhouse-migrate:
+        condition: service_completed_successfully
+      firebase:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  metering-metrics-scheduler:
+    <<: *app
+    command: pnpm nx serve metering-metrics-scheduler
+    environment:
+      PORT: 3040
+    ports:
+      - '3040:3040'
     depends_on:
       clickhouse-migrate:
         condition: service_completed_successfully

@@ -1,10 +1,10 @@
 export default {
-  displayName: 'metering-scheduler',
+  displayName: 'metering-metrics-scheduler',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: '../../coverage/apps/metering-scheduler',
+  coverageDirectory: '../../coverage/apps/metering-metrics-scheduler',
 };

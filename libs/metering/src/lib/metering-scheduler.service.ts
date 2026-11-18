@@ -6,13 +6,11 @@ import {
   Inject,
   Injectable,
   Logger,
-  OnApplicationBootstrap,
   OnModuleInit,
   type LoggerService,
 } from '@nestjs/common';
-import { LocksEvents, OnOneInstance, WithoutOverlapping } from '@nestjs/locks';
-import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
-import * as Sentry from '@sentry/nestjs';
+import { LocksEvents } from '@nestjs/locks';
+import { CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { CronTime } from 'cron';
 
 import {
@@ -21,24 +19,14 @@ import {
 } from '@entitlements/shared/metrics/statsd';
 
 import type { SchedulerJob, SchedulerRunOutcome } from './metering.types';
-import { MeteringMetricsService } from './metering-metrics.service';
-import { MeteringSchedulerConfig } from './metering-scheduler.config';
-import { MeteringSweepService } from './metering-sweep.service';
-import { UsageRefillService } from './usage-refill.service';
 
-const SCHEDULED_AT_BOOTSTRAP = CronExpression.EVERY_YEAR;
+export const SCHEDULED_AT_BOOTSTRAP = CronExpression.EVERY_YEAR;
 
 @Injectable()
-export class MeteringSchedulerService
-  implements OnModuleInit, OnApplicationBootstrap
-{
+export class MeteringSchedulerService implements OnModuleInit {
   constructor(
-    private readonly meteringSchedulerConfig: MeteringSchedulerConfig,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly locksEvents: LocksEvents,
-    private readonly meteringSweepService: MeteringSweepService,
-    private readonly meteringMetricsService: MeteringMetricsService,
-    private readonly usageRefillService: UsageRefillService,
     @Inject(StatsDService) private readonly statsd: StatsD,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
@@ -62,69 +50,14 @@ export class MeteringSchedulerService
     });
   }
 
-  onApplicationBootstrap(): void {
-    const schedules: Record<SchedulerJob, string> = {
-      sweep: this.meteringSchedulerConfig.sweepCron,
-      metrics: this.meteringSchedulerConfig.metricsCron,
-    };
-    for (const [job, cron] of Object.entries(schedules)) {
-      const cronJob = this.schedulerRegistry.getCronJob(job);
-      cronJob.setTime(new CronTime(cron));
-      cronJob.start();
-      this.logger.log(`Scheduled ${job} on "${cron}"`, 'MeteringScheduler');
-    }
+  schedule(job: SchedulerJob, cron: string): void {
+    const cronJob = this.schedulerRegistry.getCronJob(job);
+    cronJob.setTime(new CronTime(cron));
+    cronJob.start();
+    this.logger.log(`Scheduled ${job} on "${cron}"`, 'MeteringScheduler');
   }
 
-  @Cron(SCHEDULED_AT_BOOTSTRAP, {
-    name: 'sweep',
-    waitForCompletion: true,
-    disabled: true,
-  })
-  @OnOneInstance({ key: 'sweep' })
-  @WithoutOverlapping()
-  async sweep(): Promise<void> {
-    await this.counted('sweep', async () => {
-      const refilled = await this.refillUsageCounters();
-      const result = await this.meteringSweepService.sweepAll();
-      this.logger.log(
-        `Swept ${result.total} meters: ${result.held} held, ${result.failed} failed`,
-        'MeteringScheduler'
-      );
-      return result.failed > 0 || !refilled ? 'failed' : 'ok';
-    });
-  }
-
-  @Cron(SCHEDULED_AT_BOOTSTRAP, {
-    name: 'metrics',
-    waitForCompletion: true,
-    disabled: true,
-  })
-  @OnOneInstance({ key: 'metrics' })
-  @WithoutOverlapping()
-  async reportMetrics(): Promise<void> {
-    await this.counted('metrics', async () => {
-      const result = await this.meteringMetricsService.reportAll();
-      this.logger.log(
-        `Reported metrics for ${result.total} meters: ${result.failed} failed`,
-        'MeteringScheduler'
-      );
-      return result.failed > 0 ? 'failed' : 'ok';
-    });
-  }
-
-  private async refillUsageCounters(): Promise<boolean> {
-    try {
-      const outcome = await this.usageRefillService.refillIfNeeded();
-      this.logger.log(`Usage refill outcome: ${outcome}`, 'UsageRefill');
-      return true;
-    } catch (err) {
-      Sentry.captureException(err);
-      this.logger.error(err, undefined, 'UsageRefill');
-      return false;
-    }
-  }
-
-  private async counted(
+  async run(
     job: SchedulerJob,
     fn: () => Promise<SchedulerRunOutcome>
   ): Promise<void> {

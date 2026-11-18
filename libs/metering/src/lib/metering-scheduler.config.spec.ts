@@ -8,12 +8,29 @@ import { CronExpression } from '@nestjs/schedule';
 import { plainToClass } from 'class-transformer';
 import { validateSync } from 'class-validator';
 
-import { MeteringSchedulerConfig } from './metering-scheduler.config';
+import {
+  MeteringMetricsSchedulerConfig,
+  MeteringSweepSchedulerConfig,
+} from './metering-scheduler.config';
 
-function validateConfig(raw: Record<string, unknown>) {
-  const config = plainToClass(MeteringSchedulerConfig, raw, {
-    exposeDefaultValues: true,
-  });
+const CONFIGS = [
+  {
+    name: 'MeteringSweepSchedulerConfig',
+    Config: MeteringSweepSchedulerConfig,
+    defaultCron: CronExpression.EVERY_MINUTE,
+  },
+  {
+    name: 'MeteringMetricsSchedulerConfig',
+    Config: MeteringMetricsSchedulerConfig,
+    defaultCron: CronExpression.EVERY_5_MINUTES,
+  },
+];
+
+function validateConfig(
+  Config: (typeof CONFIGS)[number]['Config'],
+  raw: Record<string, unknown>
+) {
+  const config = plainToClass(Config, raw, { exposeDefaultValues: true });
   const errors = validateSync(config, {
     forbidUnknownValues: true,
     whitelist: true,
@@ -21,49 +38,30 @@ function validateConfig(raw: Record<string, unknown>) {
   return { config, errors };
 }
 
-describe('MeteringSchedulerConfig', () => {
-  it('sweeps every minute by default', () => {
-    expect(validateConfig({}).config.sweepCron).toBe(
-      CronExpression.EVERY_MINUTE
+describe.each(CONFIGS)('$name', ({ Config, defaultCron }) => {
+  it(`defaults to "${defaultCron}"`, () => {
+    expect(validateConfig(Config, {}).config.cron).toBe(defaultCron);
+  });
+
+  it('accepts the default', () => {
+    expect(validateConfig(Config, {}).errors).toEqual([]);
+  });
+
+  it('uses a configured cron expression', () => {
+    expect(validateConfig(Config, { cron: '*/2 * * * *' }).config.cron).toBe(
+      '*/2 * * * *'
     );
   });
 
-  it('reports metrics every 5 minutes by default', () => {
-    expect(validateConfig({}).config.metricsCron).toBe(
-      CronExpression.EVERY_5_MINUTES
-    );
+  it('accepts a configured cron expression', () => {
+    expect(validateConfig(Config, { cron: '*/2 * * * *' }).errors).toEqual([]);
   });
 
-  it('accepts the defaults', () => {
-    expect(validateConfig({}).errors).toEqual([]);
-  });
-
-  it('accepts configured cron expressions', () => {
-    const { config, errors } = validateConfig({
-      sweepCron: '*/2 * * * *',
-      metricsCron: '0 * * * *',
-    });
-
-    expect({
-      errors,
-      sweepCron: config.sweepCron,
-      metricsCron: config.metricsCron,
-    }).toEqual({
-      errors: [],
-      sweepCron: '*/2 * * * *',
-      metricsCron: '0 * * * *',
-    });
-  });
-
-  it.each([
-    { property: 'sweepCron', value: 'every minute' },
-    { property: 'metricsCron', value: '61 * * * *' },
-    { property: 'sweepCron', value: '' },
-  ])('rejects $property "$value"', ({ property, value }) => {
-    const { errors } = validateConfig({ [property]: value });
+  it.each(['every minute', '61 * * * *', ''])('rejects "%s"', (value) => {
+    const { errors } = validateConfig(Config, { cron: value });
 
     expect(errors.map((error) => error.constraints)).toEqual([
-      { isCronExpression: `${property} must be a valid cron expression` },
+      { isCronExpression: 'cron must be a valid cron expression' },
     ]);
   });
 });

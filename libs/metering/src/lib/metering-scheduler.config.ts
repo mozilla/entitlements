@@ -24,10 +24,12 @@ function IsCronExpression(options?: ValidationOptions): PropertyDecorator {
   };
 }
 
-export class MeteringSchedulerConfig {
+export class MeteringSweepSchedulerConfig {
   @IsCronExpression()
-  public readonly sweepCron: string = CronExpression.EVERY_MINUTE;
+  public readonly cron: string = CronExpression.EVERY_MINUTE;
+}
 
+export class MeteringMetricsSchedulerConfig {
   @IsCronExpression()
-  public readonly metricsCron: string = CronExpression.EVERY_5_MINUTES;
+  public readonly cron: string = CronExpression.EVERY_5_MINUTES;
 }
