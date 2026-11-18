@@ -85,7 +85,7 @@ export class MeterBySlugResultUtil {
 
   getNotificationThresholds(): number[] {
     const meter = this.getMeter();
-    const thresholds = meter.notificationThresholds
+    const thresholds = (meter.notificationThresholds ?? '')
       .split(',')
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
