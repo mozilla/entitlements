@@ -194,13 +194,19 @@ describe('MeterBySlugResultUtil', () => {
     expect(util.getNotificationThresholds()).toEqual([50, 80, 100]);
   });
 
-  it('returns an empty array for empty-string notificationThresholds', () => {
-    const result = MeterBySlugResultFactory({
-      meters: [StrapiMeterRawFactory({ notificationThresholds: '' })],
-    });
-    const util = new MeterBySlugResultUtil(result, 'test-slug');
-    expect(util.getNotificationThresholds()).toEqual([]);
-  });
+  it.each([
+    { label: 'empty-string', notificationThresholds: '' },
+    { label: 'null', notificationThresholds: null },
+  ])(
+    'returns an empty array for $label notificationThresholds',
+    ({ notificationThresholds }) => {
+      const result = MeterBySlugResultFactory({
+        meters: [StrapiMeterRawFactory({ notificationThresholds })],
+      });
+      const util = new MeterBySlugResultUtil(result, 'test-slug');
+      expect(util.getNotificationThresholds()).toEqual([]);
+    }
+  );
 
   it('preserves 0 as a valid threshold value', () => {
     const result = MeterBySlugResultFactory({

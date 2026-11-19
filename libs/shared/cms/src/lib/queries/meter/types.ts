@@ -35,7 +35,7 @@ interface StrapiMeterFields {
   slug: string;
   unit: string;
   limit: number;
-  notificationThresholds: string;
+  notificationThresholds: string | null;
   webhooks: StrapiMeterWebhook[];
 }
 
