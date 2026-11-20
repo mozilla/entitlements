@@ -60,9 +60,9 @@ services:
       redis:
         condition: service_started
 
-  metering-sweep-scheduler:
+  metering-sweep:
     <<: *app
-    command: pnpm nx serve metering-sweep-scheduler
+    command: pnpm nx serve metering-sweep
     environment:
       PORT: 3039
     ports:
@@ -75,9 +75,9 @@ services:
       redis:
         condition: service_started
 
-  metering-metrics-scheduler:
+  metering-metrics:
     <<: *app
-    command: pnpm nx serve metering-metrics-scheduler
+    command: pnpm nx serve metering-metrics
     environment:
       PORT: 3040
     ports:

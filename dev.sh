@@ -3,7 +3,7 @@
 set -e
 
 COMPOSE_FILE="./docker-compose-development.yaml"
-APP_SERVICES="api metering-subscriber metering-sweep-scheduler metering-metrics-scheduler"
+APP_SERVICES="api metering-subscriber metering-sweep metering-metrics"
 INFRA_SERVICES="clickhouse redis firebase"
 
 case "${1:-}" in

@@ -37,8 +37,8 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
 - **Apps (`apps/*`):**
   - `api`: HTTP API on port 3037. Usage ingest and query, usage grants, heartbeat and version endpoints, Swagger.
   - `metering-subscriber`: Pub/Sub consumer on port 3038 that dedupes events in Redis and writes them to ClickHouse. Only serves heartbeat endpoints over HTTP.
-  - `metering-sweep-scheduler`: long-running process on port 3039 that runs the threshold sweep (dispatching webhooks) on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
-  - `metering-metrics-scheduler`: long-running process on port 3040 that sends usage gauges for each swept meter to StatsD on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
+  - `metering-sweep`: long-running process on port 3039 that runs the threshold sweep (dispatching webhooks) on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
+  - `metering-metrics`: long-running process on port 3040 that sends usage gauges for each swept meter to StatsD on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
 
 - **Libraries (`libs/*`):**
   - `libs/metering`: all metering domain logic, controllers, ClickHouse client, and ClickHouse migrations.

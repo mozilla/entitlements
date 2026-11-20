@@ -6,12 +6,12 @@ This is an [Nx](https://nx.dev) monorepo using pnpm and NestJS.
 
 ## Apps
 
-| App                          | Port | Purpose                                                                                              |
-| ---------------------------- | ---- | ---------------------------------------------------------------------------------------------------- |
-| `api`                        | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                               |
-| `metering-subscriber`        | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse. |
-| `metering-sweep-scheduler`   | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks, every minute.             |
-| `metering-metrics-scheduler` | 3040 | Sends usage gauges for every swept meter to StatsD, every 5 minutes.                                 |
+| App                   | Port | Purpose                                                                                              |
+| --------------------- | ---- | ---------------------------------------------------------------------------------------------------- |
+| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                               |
+| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse. |
+| `metering-sweep`      | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks, every minute.             |
+| `metering-metrics`    | 3040 | Sends usage gauges for every swept meter to StatsD, every 5 minutes.                                 |
 
 Shared code lives in `libs/`. The domain logic is in `libs/metering`.
 
@@ -81,7 +81,7 @@ docker build -f Dockerfile.production \
 
 docker run entitlements node dist/apps/api/main.js
 docker run entitlements node dist/apps/metering-subscriber/main.js
-docker run entitlements node dist/apps/metering-sweep-scheduler/main.js
-docker run entitlements node dist/apps/metering-metrics-scheduler/main.js
+docker run entitlements node dist/apps/metering-sweep/main.js
+docker run entitlements node dist/apps/metering-metrics/main.js
 docker run entitlements node libs/metering/migrations/clickhouse/migrate.mjs
 ```

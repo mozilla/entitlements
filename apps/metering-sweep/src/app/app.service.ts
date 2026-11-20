@@ -43,7 +43,7 @@ if (sourceRepo === UNKNOWN) {
   }
 }
 
-// No l10n field — metering-metrics-scheduler is a pure backend service with no localization.
+// No l10n field — metering-sweep is a pure backend service with no localization.
 export interface VersionInfo {
   version: string;
   commit: string;

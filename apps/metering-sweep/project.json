@@ -1,7 +1,7 @@
 {
-  "name": "metering-sweep-scheduler",
+  "name": "metering-sweep",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/metering-sweep-scheduler/src",
+  "sourceRoot": "apps/metering-sweep/src",
   "projectType": "application",
   "tags": ["scope:app"],
   "targets": {
@@ -10,7 +10,7 @@
       "options": {
         "command": "webpack-cli build",
         "args": ["--node-env=production"],
-        "cwd": "apps/metering-sweep-scheduler"
+        "cwd": "apps/metering-sweep"
       },
       "configurations": {
         "development": {
@@ -24,15 +24,15 @@
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
       "options": {
-        "buildTarget": "metering-sweep-scheduler:build",
+        "buildTarget": "metering-sweep:build",
         "runBuildTargetDependencies": false
       },
       "configurations": {
         "development": {
-          "buildTarget": "metering-sweep-scheduler:build:development"
+          "buildTarget": "metering-sweep:build:development"
         },
         "production": {
-          "buildTarget": "metering-sweep-scheduler:build:production"
+          "buildTarget": "metering-sweep:build:production"
         }
       }
     },
@@ -40,15 +40,15 @@
       "executor": "@nx/eslint:lint",
       "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": ["apps/metering-sweep-scheduler/**/*.{ts,js}"]
+        "lintFilePatterns": ["apps/metering-sweep/**/*.{ts,js}"]
       }
     },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "tsc --noEmit -p apps/metering-sweep-scheduler/tsconfig.app.json",
-          "tsc --noEmit -p apps/metering-sweep-scheduler/tsconfig.spec.json"
+          "tsc --noEmit -p apps/metering-sweep/tsconfig.app.json",
+          "tsc --noEmit -p apps/metering-sweep/tsconfig.spec.json"
         ]
       }
     },
@@ -56,7 +56,7 @@
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
       "options": {
-        "jestConfig": "apps/metering-sweep-scheduler/jest.config.ts"
+        "jestConfig": "apps/metering-sweep/jest.config.ts"
       }
     }
   }
