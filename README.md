@@ -6,12 +6,12 @@ This is an [Nx](https://nx.dev) monorepo using pnpm and NestJS.
 
 ## Apps
 
-| App                   | Port | Purpose                                                                                                  |
-| --------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
-| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                                   |
-| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse.     |
-| `metering-sweep`      | n/a  | One pass that rebuilds the Redis usage counters if needed and dispatches threshold webhooks, then exits. |
-| `metering-metrics`    | n/a  | One pass over swept meters that sends usage gauges to StatsD, then exits.                                |
+| App                   | Port | Purpose                                                                                              |
+| --------------------- | ---- | ---------------------------------------------------------------------------------------------------- |
+| `api`                 | 3037 | Usage ingest and query, usage grants, heartbeat, version, and Swagger.                               |
+| `metering-subscriber` | 3038 | Consumes usage events from Pub/Sub, dedupes and counts them in Redis, and writes them to ClickHouse. |
+| `metering-sweep`      | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks, every minute.             |
+| `metering-metrics`    | 3040 | Sends usage gauges for every swept meter to StatsD, every 5 minutes.                                 |
 
 Shared code lives in `libs/`. The domain logic is in `libs/metering`.
 
@@ -33,7 +33,7 @@ pnpm install
 ./dev.sh up
 ```
 
-`./dev.sh up` builds the dev image and starts ClickHouse, Redis, and the Firebase emulators for Firestore and Pub/Sub. It then runs the ClickHouse migrations and starts all four apps. The api and subscriber rebuild on file changes, the sweep runs every 60 seconds, and the metrics job runs every 5 minutes.
+`./dev.sh up` builds the dev image and starts ClickHouse, Redis, and the Firebase emulators for Firestore and Pub/Sub. It then runs the ClickHouse migrations and starts all four apps with watch-mode rebuilds.
 
 Run `./dev.sh` with no arguments to list every command. The common ones:
 
@@ -65,7 +65,7 @@ The `local-rp` client in `dev.env` authenticates metering requests locally with 
 pnpm nx run-many -t lint
 pnpm nx run-many -t typecheck
 pnpm nx test-unit metering
-pnpm nx test-integration metering           # needs ./dev.sh infra
+pnpm nx run-many -t test-integration       # needs ./dev.sh infra
 pnpm jest -c libs/metering/jest.config.ts libs/metering/src/lib/usage.service.spec.ts
 pnpm nx run shared-cms:codegen              # needs Strapi credentials
 ```

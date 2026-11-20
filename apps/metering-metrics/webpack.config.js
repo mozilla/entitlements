@@ -15,6 +15,7 @@ module.exports = {
       main: './src/main.ts',
       tsConfig: './tsconfig.app.json',
       assets: [
+        './src/assets',
         { input: '../../config', glob: 'version.json', output: './config' },
       ],
       optimization: false,

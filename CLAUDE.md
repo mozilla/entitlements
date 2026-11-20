@@ -37,13 +37,13 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
 - **Apps (`apps/*`):**
   - `api`: HTTP API on port 3037. Usage ingest and query, usage grants, heartbeat and version endpoints, Swagger.
   - `metering-subscriber`: Pub/Sub consumer on port 3038 that dedupes events in Redis and writes them to ClickHouse. Only serves heartbeat endpoints over HTTP.
-  - `metering-sweep`: one-shot job that checks meter thresholds and dispatches webhooks, then exits. Runs as a CronJob in production.
-  - `metering-metrics`: one-shot job that sends usage gauges for each swept meter to StatsD, then exits. Runs as a CronJob every 5 minutes in production.
+  - `metering-sweep`: long-running process on port 3039 that runs the threshold sweep (dispatching webhooks) on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
+  - `metering-metrics`: long-running process on port 3040 that sends usage gauges for each swept meter to StatsD on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
 
 - **Libraries (`libs/*`):**
   - `libs/metering`: all metering domain logic, controllers, ClickHouse client, and ClickHouse migrations.
   - `libs/shared/cms`: Strapi GraphQL client with memory and Firestore caching, and the meter configuration query.
-  - `libs/shared/*`: StatsD, Firestore, type-cacheable adapters, base errors, Sentry setup, and NestJS API helpers.
+  - `libs/shared/*`: StatsD, Firestore, type-cacheable adapters, the Redis lock store, base errors, Sentry setup, and NestJS API helpers.
 
 - **Conventions:**
   - **Imports:** use `@entitlements/<path>` aliases from `tsconfig.base.json` (e.g., `@entitlements/shared/error`); avoid deep relative imports across library boundaries.
@@ -66,7 +66,7 @@ _Note:_ For authoritative targets, check each project's **`project.json`**.
 - **Infrastructure only (for integration tests):** `./dev.sh infra`
 - **Logs / status:** `./dev.sh logs-apps`, `./dev.sh logs-infra`, `./dev.sh ps`. Run `./dev.sh` with no arguments for every command.
 - **Strapi:** not part of the compose stack. Point `STRAPI_CLIENT_CONFIG__GRAPHQL_API_URI` and `STRAPI_CLIENT_CONFIG__API_KEY` at a Strapi instance in `dev.local.env`.
-- **Nx:** `nx build <app>`, `nx lint <project>`, `nx typecheck <project>`, `nx test-unit <project>`, `nx test-integration metering`, `nx serve <app>`
+- **Nx:** `nx build <app>`, `nx lint <project>`, `nx typecheck <project>`, `nx test-unit <project>`, `nx run-many -t test-integration`, `nx serve <app>`
 - **Single test file:** `pnpm jest -c <project>/jest.config.ts <path/to/file.spec.ts>`
 - **ClickHouse migrations:** `./dev.sh migrate`, or `nx run metering:migrate-clickhouse` against the env-configured server.
 - **Production image:** `docker build -f Dockerfile.production .`. The image has no default command; deployments run `node dist/apps/<app>/main.js`.
