@@ -35,13 +35,13 @@ export class MeteringMetricsSchedulerService implements OnApplicationBootstrap {
     );
   }
 
+  @OnOneInstance({ key: 'metrics' })
+  @WithoutOverlapping()
   @Cron(SCHEDULED_AT_BOOTSTRAP, {
     name: 'metrics',
     waitForCompletion: true,
     disabled: true,
   })
-  @OnOneInstance({ key: 'metrics' })
-  @WithoutOverlapping()
   async reportMetrics(): Promise<void> {
     await this.meteringSchedulerService.run('metrics', async () => {
       const result = await this.meteringMetricsService.reportAll();

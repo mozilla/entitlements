@@ -38,13 +38,13 @@ export class MeteringSweepSchedulerService implements OnApplicationBootstrap {
     );
   }
 
+  @OnOneInstance({ key: 'sweep' })
+  @WithoutOverlapping()
   @Cron(SCHEDULED_AT_BOOTSTRAP, {
     name: 'sweep',
     waitForCompletion: true,
     disabled: true,
   })
-  @OnOneInstance({ key: 'sweep' })
-  @WithoutOverlapping()
   async sweep(): Promise<void> {
     await this.meteringSchedulerService.run('sweep', async () => {
       const refilled = await this.refillUsageCounters();

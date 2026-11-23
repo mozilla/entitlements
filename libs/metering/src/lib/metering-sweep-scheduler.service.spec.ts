@@ -21,6 +21,12 @@ import { MeteringSweepService } from './metering-sweep.service';
 import { UsageRefillService } from './usage-refill.service';
 import type { SweepAllResult } from './metering.types';
 
+jest.mock('@nestjs/schedule', () =>
+  jest
+    .requireActual('../testing')
+    .withSentryCronWrapper(jest.requireActual('@nestjs/schedule'))
+);
+
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
 }));
