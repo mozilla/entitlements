@@ -27,6 +27,8 @@ export function buildSentryConfig(config: SentryConfigOpts, log: Logger) {
     checkSentryConfig(config, log);
   }
 
+  const tracesSampleRate = config.sentry?.tracesSampleRate;
+
   const opts = {
     dsn: config.sentry?.dsn || '',
     release: config.release || config.version,
@@ -34,7 +36,8 @@ export function buildSentryConfig(config: SentryConfigOpts, log: Logger) {
     sampleRate: config.sentry?.sampleRate,
     clientName: config.sentry?.clientName,
     serverName: config.sentry?.serverName,
-    tracesSampleRate: config.sentry?.tracesSampleRate,
+    tracesSampleRate:
+      tracesSampleRate && tracesSampleRate > 0 ? tracesSampleRate : undefined,
   };
 
   return opts;
