@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 
+import type { Registry } from 'prom-client';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { z } from 'zod';
 
@@ -11,12 +12,14 @@ import { StatsD } from '@entitlements/shared/metrics/statsd';
 
 import { ClickHouseClient } from './clickhouse.client';
 import { ClickHouseConfig } from './clickhouse.config';
+import type { MeteringMetrics } from './metering.metrics';
 import {
   ClickHouseError,
   ClickHouseRateLimitError,
   ClickHouseTableNameError,
 } from './metering.error';
 import type { ClickHouseRateLimiters } from './metering.types';
+import { metricValues, testMeteringMetrics } from '../testing';
 
 const rowSchema = z.object({ subject: z.string(), usage: z.number() });
 
@@ -26,6 +29,8 @@ describe('ClickHouseClient', () => {
   let statsd: StatsD;
   let increment: jest.SpyInstance;
   let rateLimiters: ClickHouseRateLimiters;
+  let registry: Registry;
+  let metrics: MeteringMetrics;
 
   const config: ClickHouseConfig = {
     url: 'https://clickhouse.example.com:8443',
@@ -74,7 +79,8 @@ describe('ClickHouseClient', () => {
         duration: 60,
       }),
     };
-    client = new ClickHouseClient(config, statsd, rateLimiters);
+    ({ registry, metrics } = testMeteringMetrics());
+    client = new ClickHouseClient(config, statsd, metrics, rateLimiters);
   });
 
   afterEach(() => {
@@ -162,6 +168,7 @@ describe('ClickHouseClient', () => {
           password: undefined,
         },
         statsd,
+        metrics,
         rateLimiters
       );
 
@@ -314,6 +321,16 @@ describe('ClickHouseClient', () => {
       );
     });
 
+    it('records a rejection in Prometheus with its operation and budget', async () => {
+      await spendReadBudget();
+
+      await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
+
+      expect(
+        await metricValues(registry, 'metering_clickhouse_limit_rejected_total')
+      ).toEqual([{ value: 1, labels: { operation: 'query', budget: 'read' } }]);
+    });
+
     it('draws usage fallback reads from their own budget, independent of reads', async () => {
       await spendReadBudget();
 
@@ -408,6 +425,18 @@ describe('ClickHouseClient', () => {
         'metering.clickhouse.limiter_error',
         { operation: 'query', budget: 'read' }
       );
+    });
+
+    it('records a limiter store failure in Prometheus with its operation and budget', async () => {
+      jest
+        .spyOn(rateLimiters.read, 'consume')
+        .mockRejectedValue(new Error('redis unavailable'));
+
+      await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
+
+      expect(
+        await metricValues(registry, 'metering_clickhouse_limiter_errors_total')
+      ).toEqual([{ value: 1, labels: { operation: 'query', budget: 'read' } }]);
     });
 
     it('draws streams from the read budget', async () => {

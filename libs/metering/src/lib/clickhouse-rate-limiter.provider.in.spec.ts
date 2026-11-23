@@ -13,7 +13,7 @@ import { StatsD } from '@entitlements/shared/metrics/statsd';
 import { connectRateLimiterStore } from './clickhouse-rate-limiter.provider';
 import { ClickHouseClient } from './clickhouse.client';
 import { MockMeteringRedisConfig } from './metering-redis.config';
-import { INTEGRATION_CLICKHOUSE_CONFIG } from '../testing';
+import { INTEGRATION_CLICKHOUSE_CONFIG, testMeteringMetrics } from '../testing';
 import { ClickHouseRateLimitError } from './metering.error';
 
 const REDIS_HOST = process.env['REDIS_TEST_HOST'] ?? 'localhost';
@@ -45,6 +45,7 @@ describe('ClickHouse rate limiters against a real Redis', () => {
     return new ClickHouseClient(
       INTEGRATION_CLICKHOUSE_CONFIG,
       new StatsD({ mock: true }),
+      testMeteringMetrics().metrics,
       {
         read: new RateLimiterRedis({
           storeClient,

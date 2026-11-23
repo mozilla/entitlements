@@ -13,6 +13,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import { MeteringMetrics } from './metering.metrics';
 import { MeteringRedisConfig } from './metering-redis.config';
 import { MeteringSweepConfig } from './metering-sweep.config';
 import { MeteringSweepManager } from './metering-sweep.manager';
@@ -51,6 +52,7 @@ export class UsageRefillService {
     private readonly usageCountersManager: UsageCountersManager,
     private readonly usageRefillManager: UsageRefillManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: MeteringMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
@@ -61,6 +63,11 @@ export class UsageRefillService {
     this.statsd.timing('metering.refill.duration', Date.now() - startedAt, {
       outcome,
     });
+    this.metrics.refills.inc({ outcome });
+    this.metrics.refillDuration.observe(
+      { outcome },
+      (Date.now() - startedAt) / 1000
+    );
     return outcome;
   }
 
@@ -173,6 +180,7 @@ export class UsageRefillService {
     this.statsd.increment('metering.refill.meter_error', {
       slug: meterKey.slug,
     });
+    this.metrics.refillMeterErrors.inc({ slug: meterKey.slug });
     Sentry.withScope((scope) => {
       scope.setTag('clientId', meterKey.clientId);
       scope.setTag('slug', meterKey.slug);
@@ -241,6 +249,9 @@ export class UsageRefillService {
     this.statsd.gauge('metering.refill.counters', totals.counters);
     this.statsd.gauge('metering.refill.sessions', totals.sessions);
     this.statsd.gauge('metering.refill.dedupe_keys', totals.dedupeKeys);
+    this.metrics.refillCounters.set(totals.counters);
+    this.metrics.refillSessions.set(totals.sessions);
+    this.metrics.refillDedupeKeys.set(totals.dedupeKeys);
     this.logger.log(
       `Refilled ${totals.counters} counters, ${totals.sessions} sessions and ${totals.dedupeKeys} dedupe keys for ${meters.length} meters`
     );

@@ -15,6 +15,7 @@ import {
   INTEGRATION_CLICKHOUSE_CONFIG,
   integrationClickHouseClient,
   integrationClickHouseRateLimiters,
+  testMeteringMetrics,
   optimizeFinal,
   truncateMeteringTables,
 } from '../testing';
@@ -260,6 +261,7 @@ describeClickHouse('MeteringEventsManager against a real ClickHouse', () => {
             maxBytesBeforeExternalGroupBy: 1,
           },
           new StatsD({ mock: true }),
+          testMeteringMetrics().metrics,
           integrationClickHouseRateLimiters()
         )
       )

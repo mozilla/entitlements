@@ -5,6 +5,7 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
+import { Registry } from 'prom-client';
 
 import {
   MeteringConfigurationManager,
@@ -12,6 +13,7 @@ import {
   type MeteringWindow,
 } from '@entitlements/shared/cms';
 import { StatsDService } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import {
   integrationClickHouseClient,
@@ -35,6 +37,7 @@ import {
   MeteringUsageCountersConfig,
   MockMeteringUsageCountersConfig,
 } from './metering-usage-counters.config';
+import { MeteringMetrics } from './metering.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageRefillManager } from './usage-refill.manager';
 import { UsageRefillRepository } from './usage-refill.repository';
@@ -159,6 +162,8 @@ describeIntegration(
               gauge: jest.fn(),
             },
           },
+          { provide: PrometheusRegistry, useValue: new Registry() },
+          MeteringMetrics,
           {
             provide: Logger,
             useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },

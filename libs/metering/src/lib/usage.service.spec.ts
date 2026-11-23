@@ -4,6 +4,7 @@
 
 import { Logger, type LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Registry } from 'prom-client';
 
 import {
   MeteringConfigurationManager,
@@ -13,6 +14,7 @@ import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import {
   IngestUsageRequestFactory,
@@ -28,9 +30,11 @@ import {
   TimestampOutOfRangeError,
   UsageCountersError,
 } from './metering.error';
+import { MeteringMetrics } from './metering.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 import { UsageService } from './usage.service';
+import { metricValues } from '../testing';
 
 const CLIENT_ID = 'vpn';
 const NOW = new Date('2026-05-15T12:00:00.000Z');
@@ -56,9 +60,11 @@ describe('UsageService', () => {
     Pick<UsageGrantsManager, 'getActiveGrantedAmount'>
   >;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
+  let registry: Registry;
   let logger: jest.Mocked<Pick<LoggerService, 'error'>>;
 
   beforeEach(async () => {
+    registry = new Registry();
     meteringConfigurationManager = { getMeterBySlug: jest.fn() };
     meteringPublisherManager = {
       publish: jest.fn().mockResolvedValue(undefined),
@@ -94,6 +100,8 @@ describe('UsageService', () => {
         { provide: UsageCountersManager, useValue: usageCountersManager },
         { provide: UsageGrantsManager, useValue: usageGrantsManager },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        MeteringMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -298,6 +306,25 @@ describe('UsageService', () => {
         });
       });
 
+      it('records Redis as the usage source in Prometheus', async () => {
+        const meter = monthlyMeter();
+        meteringConfigurationManager.getMeterBySlug.mockResolvedValue(meter);
+        usageCountersManager.findWindowUsage.mockResolvedValue({
+          ...MONTHLY_WINDOW,
+          usage: 250,
+        });
+
+        await usageService.queryUsage(
+          CLIENT_ID,
+          UsageQueryParamsFactory({ slug: meter.slug }),
+          NOW
+        );
+
+        expect(
+          await metricValues(registry, 'metering_usage_source_total')
+        ).toEqual([{ value: 1, labels: { source: 'redis' } }]);
+      });
+
       it('raises the reported limit by the active granted amount', async () => {
         const meter = monthlyMeter();
         const params = UsageQueryParamsFactory({ slug: meter.slug });
@@ -368,6 +395,23 @@ describe('UsageService', () => {
         expect(statsd.increment).toHaveBeenCalledWith('metering.usage.source', {
           source: 'clickhouse-not-populated',
         });
+      });
+
+      it('records the ClickHouse read as the usage source in Prometheus', async () => {
+        const meter = monthlyMeter();
+        meteringConfigurationManager.getMeterBySlug.mockResolvedValue(meter);
+
+        await usageService.queryUsage(
+          CLIENT_ID,
+          UsageQueryParamsFactory({ slug: meter.slug }),
+          NOW
+        );
+
+        expect(
+          await metricValues(registry, 'metering_usage_source_total')
+        ).toEqual([
+          { value: 1, labels: { source: 'clickhouse-not-populated' } },
+        ]);
       });
 
       it('reads a sliding window that ends at the end of the current hour', async () => {
@@ -506,6 +550,21 @@ describe('UsageService', () => {
         expect(statsd.increment).toHaveBeenCalledWith('metering.usage.source', {
           source: 'clickhouse-redis-error',
         });
+      });
+
+      it('records the Redis failure as the usage source in Prometheus', async () => {
+        const meter = monthlyMeter();
+        meteringConfigurationManager.getMeterBySlug.mockResolvedValue(meter);
+
+        await usageService.queryUsage(
+          CLIENT_ID,
+          UsageQueryParamsFactory({ slug: meter.slug }),
+          NOW
+        );
+
+        expect(
+          await metricValues(registry, 'metering_usage_source_total')
+        ).toEqual([{ value: 1, labels: { source: 'clickhouse-redis-error' } }]);
       });
     });
 

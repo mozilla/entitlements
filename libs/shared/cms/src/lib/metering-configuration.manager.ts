@@ -5,7 +5,9 @@
 import { getOperationName } from '@apollo/client/utilities';
 import { Inject, Injectable } from '@nestjs/common';
 import { StatsD } from 'hot-shots';
+import { Histogram, type Registry } from 'prom-client';
 
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 import { StatsDService } from '@entitlements/shared/metrics/statsd';
 import { MeterBySlugResultUtil, meterBySlugQuery } from './queries/meter';
 import type { StrapiMeter } from './queries/meter';
@@ -15,11 +17,22 @@ import type { MeterBySlugQuery } from '../__generated__/graphql';
 
 @Injectable()
 export class MeteringConfigurationManager {
+  private readonly requestDuration: Histogram<
+    'method' | 'error' | 'cache' | 'cache_type' | 'operation_name'
+  >;
+
   constructor(
     private strapiClient: StrapiClient,
     @Inject(StatsDService)
-    private statsd: StatsD
+    private statsd: StatsD,
+    @Inject(PrometheusRegistry) registry: Registry
   ) {
+    this.requestDuration = new Histogram({
+      name: 'cms_metering_request_duration_seconds',
+      help: 'Duration of a Strapi request for meter configuration',
+      labelNames: ['method', 'error', 'cache', 'cache_type', 'operation_name'],
+      registers: [registry],
+    });
     this.strapiClient.on('response', this.onStrapiClientResponse.bind(this));
   }
 
@@ -39,6 +52,16 @@ export class MeteringConfigurationManager {
       response.elapsed,
       undefined,
       tags
+    );
+    this.requestDuration.observe(
+      {
+        method: response.method,
+        error: defaultTags.error,
+        cache: defaultTags.cache,
+        cache_type: defaultTags.cacheType,
+        ...(operationName && { operation_name: operationName }),
+      },
+      response.elapsed / 1000
     );
   }
 

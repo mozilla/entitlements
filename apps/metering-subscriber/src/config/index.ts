@@ -5,6 +5,7 @@ import type { LogLevel } from '@nestjs/common';
 import { MeteringConfig } from '@entitlements/metering';
 import { StrapiClientConfig } from '@entitlements/shared/cms';
 import { FirestoreConfig } from '@entitlements/shared/db/firestore';
+import { PrometheusConfig } from '@entitlements/shared/metrics/prometheus';
 import { StatsDConfig } from '@entitlements/shared/metrics/statsd';
 import { SentryConfig } from './sentry.config';
 
@@ -28,6 +29,10 @@ export class RootConfig {
   @ValidateNested()
   @IsDefined()
   public readonly statsDConfig!: Partial<StatsDConfig>;
+
+  @Type(() => PrometheusConfig)
+  @ValidateNested()
+  public readonly prometheusConfig: PrometheusConfig = new PrometheusConfig();
 
   @Type(() => SentryConfig)
   @ValidateNested()

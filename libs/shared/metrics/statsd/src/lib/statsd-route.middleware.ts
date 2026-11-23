@@ -13,6 +13,8 @@ import {
 import type { NextFunction, Request, Response } from 'express';
 import { StatsD } from 'hot-shots';
 
+import { normalizeRoute } from '@entitlements/shared/metrics/prometheus';
+
 import { StatsDService } from './statsd.provider';
 
 /**
@@ -80,14 +82,3 @@ export class StatsDRouteMiddleware implements NestMiddleware {
     next();
   }
 }
-
-/**
- * Strips the leading `/` from an Express route pattern so downstream
- * statsd receivers (Graphite/Prometheus/etc.) that sanitize `/` don't
- * produce tag values like `-v1-billing-and-subscriptions`. Falls back
- * to `unmatched` when no route was resolved (e.g., 404).
- */
-export const normalizeRoute = (path: string | undefined): string => {
-  if (!path) return 'unmatched';
-  return path.replace(/^\//, '') || 'root';
-};

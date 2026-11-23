@@ -6,6 +6,7 @@ import type { PubSub } from '@google-cloud/pubsub';
 import { Logger } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Registry } from 'prom-client';
 
 import {
   MeteringConfigurationManager,
@@ -16,6 +17,7 @@ import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import {
   MockMeteringPubSubConfig,
@@ -24,12 +26,14 @@ import {
 import { MeteringConsumerService } from './metering-consumer.service';
 import { MeteringEventsManager } from './metering-events.manager';
 import { ClickHouseError, UsageCountersError } from './metering.error';
+import { MeteringMetrics } from './metering.metrics';
 import type { DedupeStatus, PubSubMessage } from './metering.types';
 import { UsageCountersManager } from './usage-counters.manager';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
 import { dayCountersExpireAt } from './utils/counterExpiry';
 import { hashEventId } from './utils/hashEventId';
 import { dayCountersKey, dedupeKey, sessionKey } from './utils/redisKeys';
+import { metricValues } from '../testing';
 
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
@@ -89,6 +93,7 @@ describe('MeteringConsumerService', () => {
     Pick<MeteringConfigurationManager, 'getMeterBySlug'>
   >;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
+  let registry: Registry;
   let logger: jest.Mocked<Pick<LoggerService, 'error'>>;
   let subscriptionOn: jest.Mock;
   let subscriptionClose: jest.Mock;
@@ -121,6 +126,7 @@ describe('MeteringConsumerService', () => {
         ),
     };
     statsd = { increment: jest.fn() };
+    registry = new Registry();
     logger = { error: jest.fn() };
 
     const pubsub: Pick<PubSub, 'subscription'> = {
@@ -146,6 +152,8 @@ describe('MeteringConsumerService', () => {
           useValue: meteringConfigurationManager,
         },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        MeteringMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -238,6 +246,26 @@ describe('MeteringConsumerService', () => {
       expect(statsd.increment).toHaveBeenCalledWith(
         'metering.consumer.invalid'
       );
+    });
+
+    it('records a received message in Prometheus', async () => {
+      service.handleMessage(messageFor(WIRE_EVENT));
+
+      expect(
+        await metricValues(registry, 'metering_consumer_received_total')
+      ).toEqual([{ value: 1, labels: {} }]);
+    });
+
+    it('records an invalid message as an error in Prometheus', async () => {
+      service.handleMessage({
+        data: Buffer.from('{not json', 'utf8'),
+        ack: jest.fn(),
+        nack: jest.fn(),
+      } as PubSubMessage);
+
+      expect(
+        await metricValues(registry, 'metering_consumer_errors_total')
+      ).toEqual([{ value: 1, labels: { stage: 'invalid' } }]);
     });
 
     it('acks and drops a message that fails schema validation', () => {
@@ -335,6 +363,17 @@ describe('MeteringConsumerService', () => {
       );
     });
 
+    it('records an already-stored duplicate in Prometheus', async () => {
+      usageCountersManager.claim.mockResolvedValue(['duplicate']);
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_duplicate_total')
+      ).toEqual([{ value: 1, labels: {} }]);
+    });
+
     it('nacks an event whose key is claimed by an unfinished batch', async () => {
       usageCountersManager.claim.mockResolvedValue(['pending']);
       const message = messageFor(WIRE_EVENT);
@@ -349,6 +388,17 @@ describe('MeteringConsumerService', () => {
         'metering.consumer.pending',
         1
       );
+    });
+
+    it('records an event claimed by an unfinished batch in Prometheus', async () => {
+      usageCountersManager.claim.mockResolvedValue(['pending']);
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_pending_total')
+      ).toEqual([{ value: 1, labels: {} }]);
     });
 
     it('nacks the whole batch and inserts nothing when redis is down', async () => {
@@ -368,6 +418,19 @@ describe('MeteringConsumerService', () => {
       expect(statsd.increment).toHaveBeenCalledWith(
         'metering.consumer.dedupe_error'
       );
+    });
+
+    it('records a dedupe failure in Prometheus', async () => {
+      usageCountersManager.claim.mockRejectedValue(
+        new UsageCountersError('claim', new Error('connection closed'))
+      );
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_errors_total')
+      ).toEqual([{ value: 1, labels: { stage: 'dedupe' } }]);
     });
 
     it('confirms the claims with the counter writes after a successful insert', async () => {
@@ -433,6 +496,19 @@ describe('MeteringConsumerService', () => {
       );
     });
 
+    it('records a confirm failure in Prometheus', async () => {
+      usageCountersManager.confirm.mockRejectedValue(
+        new UsageCountersError('confirm', new Error('connection closed'))
+      );
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_errors_total')
+      ).toEqual([{ value: 1, labels: { stage: 'confirm' } }]);
+    });
+
     it('counts only inserted survivors in the inserted metric', async () => {
       usageCountersManager.claim.mockResolvedValue(['claimed', 'duplicate']);
 
@@ -475,6 +551,53 @@ describe('MeteringConsumerService', () => {
         5,
         { clientId: 'vpn', slug: 'tokens' }
       );
+    });
+
+    it('records only inserted survivors in Prometheus', async () => {
+      usageCountersManager.claim.mockResolvedValue(['claimed', 'duplicate']);
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      service.handleMessage(
+        messageFor({ ...WIRE_EVENT, id: 'event-2', amount: 7 })
+      );
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_inserted_total')
+      ).toEqual([{ value: 1, labels: { client_id: 'vpn', slug: 'tokens' } }]);
+    });
+
+    it('records the inserted amount of survivors in Prometheus', async () => {
+      usageCountersManager.claim.mockResolvedValue(['claimed', 'duplicate']);
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      service.handleMessage(
+        messageFor({ ...WIRE_EVENT, id: 'event-2', amount: 7 })
+      );
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_inserted_amount_total')
+      ).toEqual([{ value: 5, labels: { client_id: 'vpn', slug: 'tokens' } }]);
+    });
+
+    it('records inserted counts separately for each client and slug in Prometheus', async () => {
+      service.handleMessage(messageFor(WIRE_EVENT));
+      service.handleMessage(
+        messageFor({ ...WIRE_EVENT, id: 'event-2', slug: 'bandwidth' })
+      );
+      service.handleMessage(
+        messageFor({ ...WIRE_EVENT, id: 'event-3', clientId: 'relay' })
+      );
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_inserted_total')
+      ).toEqual([
+        { value: 1, labels: { client_id: 'vpn', slug: 'tokens' } },
+        { value: 1, labels: { client_id: 'vpn', slug: 'bandwidth' } },
+        { value: 1, labels: { client_id: 'relay', slug: 'tokens' } },
+      ]);
     });
 
     it('reports inserted counts and amounts separately for each slug', async () => {
@@ -562,6 +685,17 @@ describe('MeteringConsumerService', () => {
       );
     });
 
+    it('records a batch nacked while ingest is paused in Prometheus', async () => {
+      usageCountersManager.isIngestAllowed.mockResolvedValue(false);
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_paused_total')
+      ).toEqual([{ value: 1, labels: {} }]);
+    });
+
     it('nacks the batch when the ingest check fails', async () => {
       usageCountersManager.isIngestAllowed.mockRejectedValue(
         new UsageCountersError(
@@ -579,6 +713,22 @@ describe('MeteringConsumerService', () => {
       expect(statsd.increment).toHaveBeenCalledWith(
         'metering.consumer.dedupe_error'
       );
+    });
+
+    it('records a failed ingest check as a dedupe error in Prometheus', async () => {
+      usageCountersManager.isIngestAllowed.mockRejectedValue(
+        new UsageCountersError(
+          'isIngestAllowed',
+          new Error('connection closed')
+        )
+      );
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_errors_total')
+      ).toEqual([{ value: 1, labels: { stage: 'dedupe' } }]);
     });
   });
 
@@ -609,6 +759,15 @@ describe('MeteringConsumerService', () => {
       expect(statsd.increment).toHaveBeenCalledWith(
         'metering.consumer.meter_error'
       );
+    });
+
+    it('records the failure as a meter error in Prometheus', async () => {
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_errors_total')
+      ).toEqual([{ value: 1, labels: { stage: 'meter' } }]);
     });
   });
 
@@ -695,6 +854,32 @@ describe('MeteringConsumerService', () => {
       const metrics = statsd.increment.mock.calls.map(([metric]) => metric);
       expect(metrics).not.toContain('metering.consumer.inserted');
       expect(metrics).not.toContain('metering.consumer.inserted_amount');
+    });
+
+    it('records no inserted count in Prometheus when the insert fails', async () => {
+      meteringEventsManager.insertEvents.mockRejectedValue(
+        new ClickHouseError('insert', new Error('down'))
+      );
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_inserted_total')
+      ).toEqual([]);
+    });
+
+    it('records the insert failure in Prometheus', async () => {
+      meteringEventsManager.insertEvents.mockRejectedValue(
+        new ClickHouseError('insert', new Error('down'))
+      );
+
+      service.handleMessage(messageFor(WIRE_EVENT));
+      await service.flushNow();
+
+      expect(
+        await metricValues(registry, 'metering_consumer_errors_total')
+      ).toEqual([{ value: 1, labels: { stage: 'insert' } }]);
     });
 
     it('releases the claims and nacks the batch when the insert fails', async () => {

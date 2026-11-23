@@ -10,6 +10,7 @@ import {
   MeteringConsumerService,
   MeteringEventsManager,
   MeteringEventsRepository,
+  MeteringMetrics,
   MeteringPubSubClientProvider,
   MeteringRedisClientProvider,
   UsageCountersManager,
@@ -19,6 +20,10 @@ import {
   StrapiClient,
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
+import {
+  PrometheusRegistryProvider,
+  PrometheusServer,
+} from '@entitlements/shared/metrics/prometheus';
 import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
 
 @Module({
@@ -40,6 +45,9 @@ import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
     MeteringEventsRepository,
     MeteringPubSubClientProvider,
     MeteringRedisClientProvider,
+    MeteringMetrics,
+    PrometheusRegistryProvider,
+    PrometheusServer,
     StatsDProvider,
     StrapiClient,
     UsageCountersManager,

@@ -7,16 +7,19 @@ import type { LoggerService } from '@nestjs/common';
 import { InMemoryLockStore, LocksModule, LocksStorage } from '@nestjs/locks';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { Registry } from 'prom-client';
 
 import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import { MeteringMetricsSchedulerService } from './metering-metrics-scheduler.service';
 import { MeteringMetricsService } from './metering-metrics.service';
 import { MeteringMetricsSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
+import { MeteringMetrics } from './metering.metrics';
 import type { MetricsReportAllResult } from './metering.types';
 
 jest.mock('@nestjs/schedule', () =>
@@ -53,6 +56,8 @@ describe('MeteringMetricsSchedulerService', () => {
         { provide: MeteringMetricsSchedulerConfig, useValue: config },
         { provide: MeteringMetricsService, useValue: metricsService },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: new Registry() },
+        MeteringMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

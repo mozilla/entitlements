@@ -11,6 +11,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import { MeteringMetrics } from './metering.metrics';
 import { ClickHouseRateLimitersToken } from './clickhouse-rate-limiter.provider';
 import { ClickHouseConfig } from './clickhouse.config';
 import {
@@ -55,6 +56,7 @@ export class ClickHouseClient {
   constructor(
     clickHouseConfig: ClickHouseConfig,
     @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: MeteringMetrics,
     @Inject(ClickHouseRateLimitersToken)
     private readonly rateLimiters: ClickHouseRateLimiters
   ) {
@@ -190,12 +192,14 @@ export class ClickHouseClient {
           operation,
           budget,
         });
+        this.metrics.clickhouseLimitRejected.inc({ operation, budget });
         throw new ClickHouseRateLimitError(operation);
       }
       this.statsd.increment('metering.clickhouse.limiter_error', {
         operation,
         budget,
       });
+      this.metrics.clickhouseLimiterErrors.inc({ operation, budget });
       if (budget !== 'write') {
         throw new ClickHouseRateLimitError(operation);
       }

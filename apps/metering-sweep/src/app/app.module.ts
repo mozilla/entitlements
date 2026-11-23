@@ -13,6 +13,7 @@ import {
   ClickHouseRateLimitersProvider,
   MeteringFirestoreProvider,
   MeteringLockRedisClientProvider,
+  MeteringMetrics,
   MeteringRedisClientProvider,
   MeteringSchedulerService,
   MeteringSweepSchedulerService,
@@ -32,6 +33,10 @@ import {
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
 import { RedisLockStore } from '@entitlements/shared/locks';
+import {
+  PrometheusRegistryProvider,
+  PrometheusServer,
+} from '@entitlements/shared/metrics/prometheus';
 import {
   StatsDProvider,
   StatsDService,
@@ -71,6 +76,9 @@ import { AppService } from './app.service';
     MeteringSweepRepository,
     MeteringSweepService,
     MeteringWebhookManager,
+    MeteringMetrics,
+    PrometheusRegistryProvider,
+    PrometheusServer,
     StatsDProvider,
     StrapiClient,
     UsageCountersManager,

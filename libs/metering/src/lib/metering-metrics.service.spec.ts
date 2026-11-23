@@ -5,6 +5,7 @@
 import { Logger } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Registry } from 'prom-client';
 
 import {
   MeterBySlugResultUtil,
@@ -16,11 +17,14 @@ import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import { ClickHouseError } from './metering.error';
 import { MeteringMetricsManager } from './metering-metrics.manager';
 import { MeteringMetricsService } from './metering-metrics.service';
 import { MeteringSweepManager } from './metering-sweep.manager';
+import { MeteringMetrics } from './metering.metrics';
+import { metricValues } from '../testing';
 
 const CLIENT_ID = 'vpn';
 const SLUG = 'tokens';
@@ -42,6 +46,7 @@ describe('MeteringMetricsService', () => {
     Pick<MeteringSweepManager, 'findSweptMeters'>
   >;
   let statsd: jest.Mocked<Pick<StatsD, 'increment' | 'timing' | 'gauge'>>;
+  let registry: Registry;
   let logger: jest.Mocked<Pick<LoggerService, 'error' | 'log' | 'warn'>>;
 
   function utilFor(raw: StrapiMeterRaw): MeterBySlugResultUtil {
@@ -64,9 +69,17 @@ describe('MeteringMetricsService', () => {
     return statsd.gauge.mock.calls.filter(([metric]) => metric === name);
   }
 
+  async function histogramCount(name: string) {
+    return (await metricValues(registry, name)).find(
+      ({ metricName }) => metricName === `${name}_count`
+    );
+  }
+
   const params = { clientId: CLIENT_ID, slug: SLUG };
+  const LABELS = { client_id: CLIENT_ID, slug: SLUG };
 
   beforeEach(async () => {
+    registry = new Registry();
     meteringConfigurationManager = {
       getMeterResultUtil: jest.fn().mockResolvedValue(utilFor(meter())),
     };
@@ -93,6 +106,8 @@ describe('MeteringMetricsService', () => {
         { provide: MeteringMetricsManager, useValue: meteringMetricsManager },
         { provide: MeteringSweepManager, useValue: meteringSweepManager },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        MeteringMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -242,6 +257,12 @@ describe('MeteringMetricsService', () => {
 
       expect(statsd.gauge).not.toHaveBeenCalled();
     });
+
+    it('sets no Prometheus gauges', async () => {
+      await service.report(params, NOW);
+
+      expect(await metricValues(registry, 'metering_meter_limit')).toEqual([]);
+    });
   });
 
   describe('gauges', () => {
@@ -278,6 +299,33 @@ describe('MeteringMetricsService', () => {
       ]);
     });
 
+    it('sets the meter limit gauge labelled with its unit in Prometheus', async () => {
+      await service.report(params, NOW);
+
+      expect(await metricValues(registry, 'metering_meter_limit')).toEqual([
+        { value: 100, labels: { ...LABELS, unit: 'tokens' } },
+      ]);
+    });
+
+    it('sets the subjects-today gauge in Prometheus', async () => {
+      await service.report(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_active_subjects_today')
+      ).toEqual([{ value: 42, labels: LABELS }]);
+    });
+
+    it('sets the notified-subjects gauge for each threshold in Prometheus', async () => {
+      await service.report(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_notified_subjects')
+      ).toEqual([
+        { value: 12, labels: { ...LABELS, threshold: '80' } },
+        { value: 3, labels: { ...LABELS, threshold: '100' } },
+      ]);
+    });
+
     it('keeps the gauges of two clients that share a slug apart', async () => {
       await service.report(params, NOW);
       await service.report({ clientId: 'relay', slug: SLUG }, NOW);
@@ -289,6 +337,18 @@ describe('MeteringMetricsService', () => {
           42,
           { clientId: 'relay', slug: SLUG },
         ],
+      ]);
+    });
+
+    it('keeps the Prometheus gauges of two clients that share a slug apart', async () => {
+      await service.report(params, NOW);
+      await service.report({ clientId: 'relay', slug: SLUG }, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_active_subjects_today')
+      ).toEqual([
+        { value: 42, labels: LABELS },
+        { value: 42, labels: { client_id: 'relay', slug: SLUG } },
       ]);
     });
   });
@@ -303,6 +363,14 @@ describe('MeteringMetricsService', () => {
       });
     });
 
+    it('records a reported meter by slug in Prometheus', async () => {
+      await service.report(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_metrics_report_total')
+      ).toEqual([{ value: 1, labels: { outcome: 'reported', slug: SLUG } }]);
+    });
+
     it('counts a meter that is not configured', async () => {
       meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
         new MeterBySlugResultUtil({ meters: [] }, SLUG)
@@ -314,6 +382,20 @@ describe('MeteringMetricsService', () => {
         outcome: 'meter-not-configured',
         slug: SLUG,
       });
+    });
+
+    it('records a meter that is not configured in Prometheus', async () => {
+      meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
+        new MeterBySlugResultUtil({ meters: [] }, SLUG)
+      );
+
+      await service.report(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_metrics_report_total')
+      ).toEqual([
+        { value: 1, labels: { outcome: 'meter-not-configured', slug: SLUG } },
+      ]);
     });
 
     it('rethrows when a ClickHouse query fails', async () => {
@@ -337,6 +419,18 @@ describe('MeteringMetricsService', () => {
         outcome: 'error',
         slug: SLUG,
       });
+    });
+
+    it('records an error outcome in Prometheus when a ClickHouse query fails', async () => {
+      meteringMetricsManager.findNotifiedSubjectCounts.mockRejectedValue(
+        new ClickHouseError('query', new Error('timeout'))
+      );
+
+      await service.report(params, NOW).catch(() => undefined);
+
+      expect(
+        await metricValues(registry, 'metering_metrics_report_total')
+      ).toEqual([{ value: 1, labels: { outcome: 'error', slug: SLUG } }]);
     });
 
     it('rethrows when the meter lookup fails', async () => {
@@ -384,6 +478,34 @@ describe('MeteringMetricsService', () => {
         expect.any(Number),
         { slug: SLUG }
       );
+    });
+
+    it('times the meter by slug in Prometheus', async () => {
+      await service.report(params, NOW);
+
+      expect(
+        await histogramCount('metering_metrics_report_duration_seconds')
+      ).toEqual({
+        metricName: 'metering_metrics_report_duration_seconds_count',
+        value: 1,
+        labels: { slug: SLUG },
+      });
+    });
+
+    it('times a meter that failed in Prometheus', async () => {
+      meteringMetricsManager.findActiveSubjectCount.mockRejectedValue(
+        new ClickHouseError('query', new Error('timeout'))
+      );
+
+      await service.report(params, NOW).catch(() => undefined);
+
+      expect(
+        await histogramCount('metering_metrics_report_duration_seconds')
+      ).toEqual({
+        metricName: 'metering_metrics_report_duration_seconds_count',
+        value: 1,
+        labels: { slug: SLUG },
+      });
     });
   });
 
@@ -487,6 +609,46 @@ describe('MeteringMetricsService', () => {
         'metering.metrics_report_all.duration',
         expect.any(Number)
       );
+    });
+
+    it('times the run in Prometheus', async () => {
+      await service.reportAll(NOW);
+
+      expect(
+        await histogramCount('metering_metrics_report_all_duration_seconds')
+      ).toEqual({
+        metricName: 'metering_metrics_report_all_duration_seconds_count',
+        value: 1,
+        labels: {},
+      });
+    });
+
+    describe('when a threshold is no longer reported', () => {
+      beforeEach(async () => {
+        meteringSweepManager.findSweptMeters.mockResolvedValue([params]);
+        await service.reportAll(NOW);
+        meteringMetricsManager.findNotifiedSubjectCounts.mockResolvedValue([
+          { threshold: 80, subjectCount: 15 },
+        ]);
+        await service.reportAll(NOW);
+      });
+
+      it('drops the gauge left over from the previous pass', async () => {
+        expect(
+          await metricValues(registry, 'metering_notified_subjects')
+        ).toEqual([{ value: 15, labels: { ...LABELS, threshold: '80' } }]);
+      });
+    });
+
+    it('drops the gauges of a meter that is no longer swept', async () => {
+      meteringSweepManager.findSweptMeters.mockResolvedValueOnce([params]);
+      await service.reportAll(NOW);
+
+      await service.reportAll(NOW);
+
+      expect(
+        await metricValues(registry, 'metering_active_subjects_today')
+      ).toEqual([]);
     });
 
     it('returns zero counts when no meter has been swept', async () => {

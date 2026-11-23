@@ -5,6 +5,7 @@
 export * from './lib/metering.config';
 export * from './lib/metering.error';
 export * from './lib/metering.factories';
+export * from './lib/metering.metrics';
 export * from './lib/metering.schema';
 export * from './lib/metering.types';
 

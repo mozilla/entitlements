@@ -8,16 +8,19 @@ import { InMemoryLockStore, LocksModule, LocksStorage } from '@nestjs/locks';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Test, type TestingModule } from '@nestjs/testing';
 import * as Sentry from '@sentry/nestjs';
+import { Registry } from 'prom-client';
 
 import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import { MeteringSweepSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
 import { MeteringSweepSchedulerService } from './metering-sweep-scheduler.service';
 import { MeteringSweepService } from './metering-sweep.service';
+import { MeteringMetrics } from './metering.metrics';
 import { UsageRefillService } from './usage-refill.service';
 import type { SweepAllResult } from './metering.types';
 
@@ -59,6 +62,8 @@ describe('MeteringSweepSchedulerService', () => {
         { provide: MeteringSweepService, useValue: sweepService },
         { provide: UsageRefillService, useValue: refillService },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: new Registry() },
+        MeteringMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

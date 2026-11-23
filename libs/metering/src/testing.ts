@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 
+import { type MetricValueWithName, Registry } from 'prom-client';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';
@@ -16,6 +17,7 @@ import {
   SESSIONS_TABLE,
   WATERMARKS_TABLE,
 } from './lib/metering.constants';
+import { MeteringMetrics } from './lib/metering.metrics';
 import type {
   ClickHouseRateLimiters,
   MeteringRedisPipeline,
@@ -92,10 +94,33 @@ export function integrationClickHouseRateLimiters(): ClickHouseRateLimiters {
   };
 }
 
+export function testMeteringMetrics(): {
+  registry: Registry;
+  metrics: MeteringMetrics;
+} {
+  const registry = new Registry();
+  return { registry, metrics: new MeteringMetrics(registry) };
+}
+
+/** The recorded samples of one metric, without histogram buckets. */
+export async function metricValues(
+  registry: Registry,
+  name: string
+): Promise<MetricValueWithName<string>[]> {
+  const metric = await registry.getSingleMetric(name)?.get();
+  if (!metric) {
+    throw new Error(`metric ${name} is not registered`);
+  }
+  return (metric.values as MetricValueWithName<string>[]).filter(
+    ({ metricName }) => !metricName?.endsWith('_bucket')
+  );
+}
+
 export function integrationClickHouseClient(): ClickHouseClient {
   return new ClickHouseClient(
     INTEGRATION_CLICKHOUSE_CONFIG,
     new StatsD({ mock: true }),
+    new MeteringMetrics(new Registry()),
     integrationClickHouseRateLimiters()
   );
 }

@@ -45,6 +45,9 @@
       ],
       "@entitlements/shared/error": ["./libs/shared/error/src/index.ts"],
       "@entitlements/shared/locks": ["./libs/shared/locks/src/index.ts"],
+      "@entitlements/shared/metrics/prometheus": [
+        "./libs/shared/metrics/prometheus/src/index.ts"
+      ],
       "@entitlements/shared/metrics/statsd": [
         "./libs/shared/metrics/statsd/src/index.ts"
       ],

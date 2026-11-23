@@ -5,11 +5,13 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { Logger, type LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Registry } from 'prom-client';
 
 import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import { UsageGrantRecordFactory } from './metering.factories';
 import {
@@ -19,6 +21,7 @@ import {
 import { MockMeteringFirestoreProvider } from './metering-firestore.provider';
 import { MeteringRedisClient } from './metering-redis.provider';
 import { UsageGrantsLoadError } from './metering.error';
+import { MeteringMetrics } from './metering.metrics';
 import type { MeteringRedis } from './metering.types';
 import { UsageGrantsManager } from './usage-grants.manager';
 import {
@@ -26,6 +29,7 @@ import {
   getUsageGrants,
   insertUsageGrant,
 } from './usage-grants.repository';
+import { metricValues } from '../testing';
 
 jest.mock('./usage-grants.repository');
 
@@ -40,11 +44,13 @@ describe('UsageGrantsManager', () => {
   let cache: Map<string, string>;
   let redis: jest.Mocked<Pick<MeteringRedis, 'get' | 'set' | 'del'>>;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
+  let registry: Registry;
   let logger: jest.Mocked<Pick<LoggerService, 'error' | 'warn'>>;
   const now = new Date('2026-05-15T12:00:00.000Z');
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    registry = new Registry();
     cache = new Map();
     redis = {
       get: jest.fn((key: string) => Promise.resolve(cache.get(key) ?? null)),
@@ -69,6 +75,8 @@ describe('UsageGrantsManager', () => {
         MockMeteringFirestoreProvider,
         { provide: MeteringRedisClient, useValue: redis },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        MeteringMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -141,6 +149,22 @@ describe('UsageGrantsManager', () => {
       expect(statsd.increment).toHaveBeenCalledWith(
         'metering.usage_grants.cache_clear_error'
       );
+    });
+
+    it('records a cache clear failure in Prometheus', async () => {
+      redis.del.mockRejectedValueOnce(new Error('connection closed'));
+
+      await manager.createGrant({
+        subject: 'user-1',
+        slug: 'tokens',
+        amount: 500,
+        grantedBy: 'rp-1',
+        expiresAt: null,
+      });
+
+      expect(
+        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+      ).toEqual([{ value: 1, labels: { operation: 'clear' } }]);
     });
 
     it('propagates a repository failure', async () => {
@@ -342,6 +366,21 @@ describe('UsageGrantsManager', () => {
       );
     });
 
+    it('records a cache read failure in Prometheus', async () => {
+      redis.get.mockRejectedValueOnce(new Error('connection closed'));
+      jest
+        .mocked(getUsageGrants)
+        .mockResolvedValue([
+          UsageGrantRecordFactory({ slug: 'tokens', amount: 100 }),
+        ]);
+
+      await manager.getActiveGrantedAmount('user-1', 'tokens', now);
+
+      expect(
+        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+      ).toEqual([{ value: 1, labels: { operation: 'read' } }]);
+    });
+
     it('reads Firestore when the cached value has an unexpected shape', async () => {
       cache.set(CACHE_KEY, '[{"slug":"tokens"}]');
       jest
@@ -370,6 +409,22 @@ describe('UsageGrantsManager', () => {
       expect(statsd.increment).toHaveBeenCalledWith(
         'metering.usage_grants.cache_write_error'
       );
+    });
+
+    it('records a cache write failure in Prometheus', async () => {
+      redis.set.mockRejectedValueOnce(new Error('OOM'));
+      jest
+        .mocked(getUsageGrants)
+        .mockResolvedValue([
+          UsageGrantRecordFactory({ slug: 'tokens', amount: 100 }),
+        ]);
+
+      await manager.getActiveGrantedAmount('user-1', 'tokens', now);
+      await settle();
+
+      expect(
+        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+      ).toEqual([{ value: 1, labels: { operation: 'write' } }]);
     });
 
     it('wraps a repository failure in UsageGrantsLoadError', async () => {
@@ -406,6 +461,20 @@ describe('UsageGrantsManager', () => {
       expect(statsd.increment).not.toHaveBeenCalledWith(
         'metering.usage_grants.cache_read_error'
       );
+    });
+
+    it('does not record a repository failure as a cache error in Prometheus', async () => {
+      jest
+        .mocked(getUsageGrants)
+        .mockRejectedValue(new Error('firestore down'));
+
+      await manager
+        .getActiveGrantedAmount('user-1', 'tokens', now)
+        .catch(() => undefined);
+
+      expect(
+        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+      ).toEqual([]);
     });
   });
 });

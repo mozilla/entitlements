@@ -39,11 +39,12 @@ Nx monorepo, pnpm, NestJS. Every app is built with webpack into `dist/apps/<app>
   - `metering-subscriber`: Pub/Sub consumer on port 3038 that dedupes events in Redis and writes them to ClickHouse. Only serves heartbeat endpoints over HTTP.
   - `metering-sweep`: long-running process on port 3039 that runs the threshold sweep (dispatching webhooks) on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
   - `metering-metrics`: long-running process on port 3040 that sends usage gauges for each swept meter to StatsD on a cron schedule, on one instance at a time via a Redis lock. Only serves heartbeat endpoints over HTTP.
+  - Every app also serves Prometheus `GET /metrics` on its own in-cluster port (`PROMETHEUS_CONFIG__PORT`, default 9464), outside the Nest HTTP app. Never expose it through an ingress.
 
 - **Libraries (`libs/*`):**
   - `libs/metering`: all metering domain logic, controllers, ClickHouse client, and ClickHouse migrations.
   - `libs/shared/cms`: Strapi GraphQL client with memory and Firestore caching, and the meter configuration query.
-  - `libs/shared/*`: StatsD, Firestore, type-cacheable adapters, the Redis lock store, base errors, Sentry setup, and NestJS API helpers.
+  - `libs/shared/*`: StatsD, Prometheus, Firestore, type-cacheable adapters, the Redis lock store, base errors, Sentry setup, and NestJS API helpers.
 
 - **Conventions:**
   - **Imports:** use `@entitlements/<path>` aliases from `tsconfig.base.json` (e.g., `@entitlements/shared/error`); avoid deep relative imports across library boundaries.
