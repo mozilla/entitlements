@@ -8,13 +8,18 @@ import { StatsDConfig } from './statsd.config';
 
 export const StatsDService = Symbol('STATSD');
 
+export const DEFAULT_STATSD_MAX_BUFFER_SIZE = 1432;
+
 export const StatsDProvider: Provider<StatsD> = {
   provide: StatsDService,
   useFactory: (config: StatsDConfig) => {
     if (config.host === '') {
       return new StatsD({ mock: true });
     }
-    return new StatsD(config);
+    return new StatsD({
+      ...config,
+      maxBufferSize: config.maxBufferSize || DEFAULT_STATSD_MAX_BUFFER_SIZE,
+    });
   },
   inject: [StatsDConfig],
 };
