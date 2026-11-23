@@ -115,6 +115,27 @@ describe('config-builder', () => {
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
   });
 
+  it.each([0.1, 1])('keeps a tracesSampleRate of %s', (tracesSampleRate) => {
+    const clone = cloneConfig(testConfig);
+    clone.sentry.tracesSampleRate = tracesSampleRate;
+
+    const config = buildSentryConfig(clone, mockLogger);
+
+    expect(config.tracesSampleRate).toBe(tracesSampleRate);
+  });
+
+  it.each([0, -1, undefined])(
+    'leaves tracesSampleRate unset for %s so Sentry tracing is off',
+    (tracesSampleRate) => {
+      const clone = cloneConfig(testConfig);
+      clone.sentry.tracesSampleRate = tracesSampleRate;
+
+      const config = buildSentryConfig(clone, mockLogger);
+
+      expect(config.tracesSampleRate).toBeUndefined();
+    }
+  );
+
   it('can use console logger', () => {
     const config = buildSentryConfig(testConfig, console);
     expect(config).toBeDefined();
