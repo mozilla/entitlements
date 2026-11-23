@@ -7,6 +7,20 @@ import { createHash } from 'crypto';
 
 export const CMS_QUERY_CACHE_KEY = 'cmsQueryCache';
 
+const queryHashes = new WeakMap<object, string>();
+
+function hashQuery(query: object): string {
+  const cached = queryHashes.get(query);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const queryHash = createHash('sha256')
+    .update(JSON.stringify(query))
+    .digest('hex');
+  queryHashes.set(query, queryHash);
+  return queryHash;
+}
+
 export const cacheKeyForQuery = function <
   Result,
   Variables extends OperationVariables,
@@ -16,9 +30,7 @@ export const cacheKeyForQuery = function <
     variables,
     Object.keys(variables as Record<string, unknown>).sort()
   );
-  const queryHash = createHash('sha256')
-    .update(JSON.stringify(query))
-    .digest('hex');
+  const queryHash = hashQuery(query);
   const variableHash = createHash('sha256')
     .update(variablesString)
     .digest('hex');
