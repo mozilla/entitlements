@@ -19,6 +19,12 @@ import { MeteringMetricsSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
 import type { MetricsReportAllResult } from './metering.types';
 
+jest.mock('@nestjs/schedule', () =>
+  jest
+    .requireActual('../testing')
+    .withSentryCronWrapper(jest.requireActual('@nestjs/schedule'))
+);
+
 const METRICS_RESULT: MetricsReportAllResult = { total: 2, failed: 0 };
 const OTHER_INSTANCE = 'other-instance';
 const HELD_MS = 60_000;

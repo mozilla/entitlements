@@ -135,3 +135,27 @@ export function anchoredClock(): {
     at: (offsetMs: number) => new Date(anchor.getTime() + offsetMs),
   };
 }
+
+/**
+ * `@nestjs/schedule` with `@Cron` replacing the method with a plain wrapper, as
+ * Sentry's Nest instrumentation does in production.
+ */
+export function withSentryCronWrapper<
+  T extends { Cron: (...args: never[]) => MethodDecorator },
+>(schedule: T): T {
+  return {
+    ...schedule,
+    Cron: (...args: Parameters<T['Cron']>): MethodDecorator => {
+      const decorate = schedule.Cron(...args);
+      return (target, propertyKey, descriptor) => {
+        const handler = descriptor.value as unknown as (
+          ...handlerArgs: unknown[]
+        ) => unknown;
+        descriptor.value = function (this: unknown, ...handlerArgs: unknown[]) {
+          return handler.apply(this, handlerArgs);
+        } as typeof descriptor.value;
+        return decorate(target, propertyKey, descriptor);
+      };
+    },
+  };
+}
