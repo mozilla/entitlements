@@ -62,7 +62,11 @@ services:
 
   metering-sweep:
     <<: *app
-    command: sh -c 'while true; do pnpm nx run metering-sweep:run; sleep 60; done'
+    command: pnpm nx serve metering-sweep
+    environment:
+      PORT: 3039
+    ports:
+      - '3039:3039'
     depends_on:
       clickhouse-migrate:
         condition: service_completed_successfully
@@ -73,7 +77,11 @@ services:
 
   metering-metrics:
     <<: *app
-    command: sh -c 'while true; do pnpm nx run metering-metrics:run; sleep 300; done'
+    command: pnpm nx serve metering-metrics
+    environment:
+      PORT: 3040
+    ports:
+      - '3040:3040'
     depends_on:
       clickhouse-migrate:
         condition: service_completed_successfully

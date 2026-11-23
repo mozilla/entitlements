@@ -19,16 +19,21 @@
       },
       "outputs": ["{workspaceRoot}/dist/{projectRoot}"]
     },
-    "run": {
-      "executor": "nx:run-commands",
-      "dependsOn": [
-        {
-          "target": "build",
-          "params": "forward"
-        }
-      ],
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
       "options": {
-        "command": "node dist/apps/metering-sweep/main.js"
+        "buildTarget": "metering-sweep:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "metering-sweep:build:development"
+        },
+        "production": {
+          "buildTarget": "metering-sweep:build:production"
+        }
       }
     },
     "lint": {

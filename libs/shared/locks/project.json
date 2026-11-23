@@ -1,0 +1,44 @@
+{
+  "name": "shared-locks",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/locks/src",
+  "projectType": "library",
+  "tags": ["scope:lib"],
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "libs/shared/locks/**/*.ts",
+          "libs/shared/locks/package.json"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/shared/locks/tsconfig.lib.json",
+          "tsc --noEmit -p libs/shared/locks/tsconfig.spec.json"
+        ]
+      }
+    },
+    "test-unit": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/shared/locks/jest.config.ts",
+        "testPathPatterns": ["^(?!.*\\.in\\.spec\\.ts$).*$"]
+      }
+    },
+    "test-integration": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/shared/locks/jest.config.ts",
+        "testPathPatterns": ["\\.in\\.spec\\.ts$"]
+      }
+    }
+  }
+}

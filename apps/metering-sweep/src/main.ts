@@ -7,60 +7,18 @@ import './monitoring';
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import * as Sentry from '@sentry/nestjs';
-
-import {
-  MeteringSweepService,
-  UsageRefillService,
-} from '@entitlements/metering';
-import {
-  StatsDService,
-  type StatsD,
-} from '@entitlements/shared/metrics/statsd';
-
 import { AppModule } from './app/app.module';
+import { NEST_LOG_LEVELS } from './config';
 
-async function refillUsageCounters(
-  refillService: UsageRefillService
-): Promise<boolean> {
-  try {
-    const outcome = await refillService.refillIfNeeded();
-    Logger.log(`Usage refill outcome: ${outcome}`, 'UsageRefill');
-    return true;
-  } catch (err) {
-    Sentry.captureException(err);
-    Logger.error(err, undefined, 'UsageRefill');
-    return false;
-  }
-}
-
-async function run(): Promise<number> {
-  const app = await NestFactory.createApplicationContext(AppModule);
-  try {
-    const refillSucceeded = await refillUsageCounters(
-      app.get(UsageRefillService)
-    );
-    const result = await app.get(MeteringSweepService).sweepAll();
-    Logger.log(
-      `Swept ${result.total} meters: ${result.held} held, ${result.failed} failed`,
-      'MeteringSweep'
-    );
-    return result.failed > 0 || !refillSucceeded ? 1 : 0;
-  } finally {
-    await new Promise<void>((resolve) =>
-      app.get<StatsD>(StatsDService).close(() => resolve())
-    );
-    await app.close();
-  }
-}
-
-run()
-  .catch((err: unknown) => {
-    Sentry.captureException(err);
-    Logger.error(err, undefined, 'MeteringSweep');
-    return 1;
-  })
-  .then(async (code) => {
-    await Sentry.close(2000);
-    process.exit(code);
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, {
+    logger: [NEST_LOG_LEVELS[process.env.LOG_LEVEL ?? ''] ?? 'log'],
   });
+
+  const port = process.env.PORT || 3039;
+  app.enableShutdownHooks();
+  await app.listen(port);
+  Logger.log(`🚀 Application is running on: http://localhost:${port}`);
+}
+
+bootstrap();

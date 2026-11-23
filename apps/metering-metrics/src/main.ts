@@ -7,40 +7,18 @@ import './monitoring';
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import * as Sentry from '@sentry/nestjs';
-
-import { MeteringMetricsService } from '@entitlements/metering';
-import {
-  StatsDService,
-  type StatsD,
-} from '@entitlements/shared/metrics/statsd';
-
 import { AppModule } from './app/app.module';
+import { NEST_LOG_LEVELS } from './config';
 
-async function run(): Promise<number> {
-  const app = await NestFactory.createApplicationContext(AppModule);
-  try {
-    const result = await app.get(MeteringMetricsService).reportAll();
-    Logger.log(
-      `Reported metrics for ${result.total} meters: ${result.failed} failed`,
-      'MeteringMetrics'
-    );
-    return result.failed > 0 ? 1 : 0;
-  } finally {
-    await new Promise<void>((resolve) =>
-      app.get<StatsD>(StatsDService).close(() => resolve())
-    );
-    await app.close();
-  }
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, {
+    logger: [NEST_LOG_LEVELS[process.env.LOG_LEVEL ?? ''] ?? 'log'],
+  });
+
+  const port = process.env.PORT || 3040;
+  app.enableShutdownHooks();
+  await app.listen(port);
+  Logger.log(`🚀 Application is running on: http://localhost:${port}`);
 }
 
-run()
-  .catch((err: unknown) => {
-    Sentry.captureException(err);
-    Logger.error(err, undefined, 'MeteringMetrics');
-    return 1;
-  })
-  .then(async (code) => {
-    await Sentry.close(2000);
-    process.exit(code);
-  });
+bootstrap();
