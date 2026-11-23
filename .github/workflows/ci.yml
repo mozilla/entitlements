@@ -67,7 +67,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: node libs/metering/migrations/clickhouse/migrate.mjs
-      - run: pnpm nx test-integration metering
+      - run: pnpm nx run-many -t test-integration
 
   docker:
     name: Docker build

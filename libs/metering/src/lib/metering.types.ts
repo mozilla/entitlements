@@ -71,6 +71,10 @@ export interface MeteringRedis {
   disconnect(): void;
 }
 
+export type SchedulerJob = 'sweep' | 'metrics';
+
+export type SchedulerRunOutcome = 'ok' | 'failed';
+
 export interface ClickHouseRateLimiters {
   read: RateLimiterAbstract;
   write: RateLimiterAbstract;

@@ -2,14 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Logger, Module } from '@nestjs/common';
-import { SentryModule } from '@sentry/nestjs/setup';
+import { Inject, Logger, Module, OnApplicationShutdown } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { LocksModule } from '@nestjs/locks';
+import { ScheduleModule } from '@nestjs/schedule';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 
 import {
   ClickHouseClient,
   ClickHouseRateLimitersProvider,
   MeteringFirestoreProvider,
+  MeteringLockRedisClientProvider,
   MeteringRedisClientProvider,
+  MeteringSchedulerService,
+  MeteringSweepSchedulerService,
   MeteringSweepManager,
   MeteringSweepRepository,
   MeteringSweepService,
@@ -25,20 +31,42 @@ import {
   StrapiClient,
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
-import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
+import { RedisLockStore } from '@entitlements/shared/locks';
+import {
+  StatsDProvider,
+  StatsDService,
+  type StatsD,
+} from '@entitlements/shared/metrics/statsd';
 
 import { RootConfigModule } from '../config/config.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
-  imports: [SentryModule.forRoot(), RootConfigModule],
+  imports: [
+    ScheduleModule.forRoot(),
+    LocksModule.forRoot(),
+    SentryModule.forRoot(),
+    RootConfigModule,
+  ],
+  controllers: [AppController],
   providers: [
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
     Logger,
+    AppService,
     ClickHouseClient,
     ClickHouseRateLimitersProvider,
     FirestoreProvider,
     MeteringConfigurationManager,
     MeteringFirestoreProvider,
+    MeteringLockRedisClientProvider,
+    RedisLockStore,
     MeteringRedisClientProvider,
+    MeteringSchedulerService,
+    MeteringSweepSchedulerService,
     MeteringSweepManager,
     MeteringSweepRepository,
     MeteringSweepService,
@@ -52,4 +80,10 @@ import { RootConfigModule } from '../config/config.module';
     UsageRefillService,
   ],
 })
-export class AppModule {}
+export class AppModule implements OnApplicationShutdown {
+  constructor(@Inject(StatsDService) private readonly statsd: StatsD) {}
+
+  onApplicationShutdown(): Promise<void> {
+    return new Promise((resolve) => this.statsd.close(() => resolve()));
+  }
+}

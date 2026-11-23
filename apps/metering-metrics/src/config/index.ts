@@ -2,7 +2,10 @@ import { Type } from 'class-transformer';
 import { IsDefined, IsIn, IsOptional, ValidateNested } from 'class-validator';
 import type { LogLevel } from '@nestjs/common';
 
-import { MeteringConfig } from '@entitlements/metering';
+import {
+  MeteringConfig,
+  MeteringMetricsSchedulerConfig,
+} from '@entitlements/metering';
 import { StrapiClientConfig } from '@entitlements/shared/cms';
 import { FirestoreConfig } from '@entitlements/shared/db/firestore';
 import { StatsDConfig } from '@entitlements/shared/metrics/statsd';
@@ -43,6 +46,11 @@ export class RootConfig {
   @ValidateNested()
   @IsDefined()
   public readonly meteringConfig!: Partial<MeteringConfig>;
+
+  @Type(() => MeteringMetricsSchedulerConfig)
+  @ValidateNested()
+  public readonly meteringMetricsSchedulerConfig: MeteringMetricsSchedulerConfig =
+    new MeteringMetricsSchedulerConfig();
 
   @IsOptional()
   @IsIn(Object.keys(NEST_LOG_LEVELS))
