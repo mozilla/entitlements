@@ -29,7 +29,7 @@ import {
   getUsageGrants,
   insertUsageGrant,
 } from './usage-grants.repository';
-import { metricValues } from '../testing';
+import { incrementedMetricValues } from '../testing';
 
 jest.mock('./usage-grants.repository');
 
@@ -163,7 +163,10 @@ describe('UsageGrantsManager', () => {
       });
 
       expect(
-        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_usage_grants_cache_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { operation: 'clear' } }]);
     });
 
@@ -377,7 +380,10 @@ describe('UsageGrantsManager', () => {
       await manager.getActiveGrantedAmount('user-1', 'tokens', now);
 
       expect(
-        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_usage_grants_cache_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { operation: 'read' } }]);
     });
 
@@ -423,7 +429,10 @@ describe('UsageGrantsManager', () => {
       await settle();
 
       expect(
-        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_usage_grants_cache_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { operation: 'write' } }]);
     });
 
@@ -473,7 +482,10 @@ describe('UsageGrantsManager', () => {
         .catch(() => undefined);
 
       expect(
-        await metricValues(registry, 'metering_usage_grants_cache_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_usage_grants_cache_errors_total'
+        )
       ).toEqual([]);
     });
   });

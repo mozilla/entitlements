@@ -34,7 +34,7 @@ import { UsageMetrics } from './metering.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 import { UsageService } from './usage.service';
-import { metricValues } from '../testing';
+import { incrementedMetricValues } from '../testing';
 
 const CLIENT_ID = 'vpn';
 const NOW = new Date('2026-05-15T12:00:00.000Z');
@@ -321,7 +321,7 @@ describe('UsageService', () => {
         );
 
         expect(
-          await metricValues(registry, 'metering_usage_source_total')
+          await incrementedMetricValues(registry, 'metering_usage_source_total')
         ).toEqual([{ value: 1, labels: { source: 'redis' } }]);
       });
 
@@ -408,7 +408,7 @@ describe('UsageService', () => {
         );
 
         expect(
-          await metricValues(registry, 'metering_usage_source_total')
+          await incrementedMetricValues(registry, 'metering_usage_source_total')
         ).toEqual([
           { value: 1, labels: { source: 'clickhouse-not-populated' } },
         ]);
@@ -563,7 +563,7 @@ describe('UsageService', () => {
         );
 
         expect(
-          await metricValues(registry, 'metering_usage_source_total')
+          await incrementedMetricValues(registry, 'metering_usage_source_total')
         ).toEqual([{ value: 1, labels: { source: 'clickhouse-redis-error' } }]);
       });
     });

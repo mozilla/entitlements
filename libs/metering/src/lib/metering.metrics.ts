@@ -7,13 +7,37 @@ import {
   Counter,
   Gauge,
   Histogram,
+  type LabelValues,
   type Registry,
 } from '@prometheus-io/client';
 
+import type { LocksJobSkipReason, LocksLockLostEvent } from '@nestjs/locks';
+
 import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
+
+import type { ClickHouseReadBudget } from './clickhouse.client';
+import type { SchedulerJob, SchedulerRunOutcome } from './metering.types';
+import type { UsageRefillOutcome } from './usage-refill.service';
 
 /** Buckets for job durations, up to the sweep's ~15 minute shutdown grace. */
 const JOB_DURATION_BUCKETS = [0.1, 0.5, 1, 5, 15, 30, 60, 120, 300, 600, 900];
+
+/** Lists every member of `T`; the `Record` fails to compile if one is missing. */
+const allOf = <T extends string>(members: Record<T, true>): T[] =>
+  Object.keys(members) as T[];
+
+/**
+ * Starts each label combination at 0. A series that first appears at 1 hides
+ * that increment from `increase()` and `rate()`, so rare events read as none.
+ */
+const initialize = <L extends string>(
+  metric: Counter<L>,
+  combinations: LabelValues<L>[]
+): void => {
+  for (const labels of combinations) {
+    metric.inc(labels, 0);
+  }
+};
 
 const counter = <L extends string>(
   registry: Registry,
@@ -135,6 +159,15 @@ export class RefillMetrics {
       'Usage counter refills',
       ['outcome']
     );
+    initialize(
+      this.refills,
+      allOf<UsageRefillOutcome>({
+        refilled: true,
+        repaired: true,
+        'meters-rebuilt': true,
+        checked: true,
+      }).map((outcome) => ({ outcome }))
+    );
     this.duration = jobHistogram(
       registry,
       'metering_refill_duration_seconds',
@@ -251,6 +284,34 @@ export class SchedulerMetrics {
       ['key', 'detected_by']
     );
   }
+
+  initializeJob(job: SchedulerJob): void {
+    initialize(
+      this.runs,
+      allOf<SchedulerRunOutcome | 'error'>({
+        ok: true,
+        failed: true,
+        error: true,
+      }).map((outcome) => ({ job, outcome }))
+    );
+    initialize(
+      this.skips,
+      allOf<LocksJobSkipReason>({
+        'ownership-unavailable': true,
+        'run-lock-unavailable': true,
+        shutdown: true,
+      }).map((reason) => ({ job, reason }))
+    );
+    initialize(
+      this.lockLost,
+      [`${job}:owner`, job].flatMap((key) =>
+        allOf<LocksLockLostEvent['detectedBy']>({
+          renewal: true,
+          deadline: true,
+        }).map((detected_by) => ({ key, detected_by }))
+      )
+    );
+  }
 }
 
 export type ConsumerErrorStage =
@@ -311,8 +372,23 @@ export class ConsumerMetrics {
       'Consumer failures by stage',
       ['stage']
     );
+    initialize(
+      this.errors,
+      allOf<ConsumerErrorStage>({
+        confirm: true,
+        dedupe: true,
+        flush: true,
+        insert: true,
+        invalid: true,
+        meter: true,
+        subscription: true,
+      }).map((stage) => ({ stage }))
+    );
   }
 }
+
+export type UsageSource =
+  'redis' | 'clickhouse-not-populated' | 'clickhouse-redis-error';
 
 @Injectable()
 export class UsageMetrics {
@@ -327,6 +403,14 @@ export class UsageMetrics {
       'Window usage lookups by the source that answered',
       ['source']
     );
+    initialize(
+      this.source,
+      allOf<UsageSource>({
+        redis: true,
+        'clickhouse-not-populated': true,
+        'clickhouse-redis-error': true,
+      }).map((source) => ({ source }))
+    );
     this.published = counter(
       registry,
       'metering_publisher_published_total',
@@ -340,6 +424,8 @@ export class UsageMetrics {
   }
 }
 
+export type UsageGrantsCacheOperation = 'read' | 'write' | 'clear';
+
 @Injectable()
 export class UsageGrantsMetrics {
   readonly cacheErrors;
@@ -350,6 +436,14 @@ export class UsageGrantsMetrics {
       'metering_usage_grants_cache_errors_total',
       'Usage grant cache failures',
       ['operation']
+    );
+    initialize(
+      this.cacheErrors,
+      allOf<UsageGrantsCacheOperation>({
+        read: true,
+        write: true,
+        clear: true,
+      }).map((operation) => ({ operation }))
     );
   }
 }
@@ -380,6 +474,13 @@ export class WebhookMetrics {
       ['signing_client_id']
     );
   }
+
+  initializeClients(signingClientIds: string[]): void {
+    initialize(
+      this.dispatchErrors,
+      signingClientIds.map((signing_client_id) => ({ signing_client_id }))
+    );
+  }
 }
 
 @Injectable()
@@ -400,5 +501,18 @@ export class ClickHouseMetrics {
       'ClickHouse rate limiter failures',
       ['operation', 'budget']
     );
+    const readBudgets = allOf<ClickHouseReadBudget>({
+      read: true,
+      usageFallback: true,
+    });
+    const operations = [
+      ...['query', 'stream'].flatMap((operation) =>
+        readBudgets.map((budget) => ({ operation, budget }))
+      ),
+      { operation: 'insert', budget: 'write' },
+      { operation: 'command', budget: 'write' },
+    ];
+    initialize(this.limitRejected, operations);
+    initialize(this.limiterErrors, operations);
   }
 }

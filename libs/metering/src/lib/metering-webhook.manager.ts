@@ -47,6 +47,7 @@ export class MeteringWebhookManager {
       }
       this.secretByClientId.set(clientId, normalizedSecret);
     }
+    this.metrics.initializeClients([...this.secretByClientId.keys()]);
   }
 
   /**

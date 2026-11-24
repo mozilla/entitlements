@@ -25,7 +25,7 @@ import {
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
 import { SchedulerMetrics } from './metering.metrics';
-import { metricValues } from '../testing';
+import { incrementedMetricValues, metricValues } from '../testing';
 
 const CONFIGURED_CRON = '0 0 1 2 *';
 
@@ -72,6 +72,18 @@ describe('MeteringSchedulerService', () => {
   });
 
   describe('schedule', () => {
+    it("starts the job's run counters at zero", async () => {
+      service.schedule('sweep', CONFIGURED_CRON);
+
+      expect(
+        await metricValues(metricsRegistry, 'metering_scheduler_runs_total')
+      ).toEqual([
+        { value: 0, labels: { job: 'sweep', outcome: 'ok' } },
+        { value: 0, labels: { job: 'sweep', outcome: 'failed' } },
+        { value: 0, labels: { job: 'sweep', outcome: 'error' } },
+      ]);
+    });
+
     it('sets the job to run on the given cron', () => {
       service.schedule('sweep', CONFIGURED_CRON);
 
@@ -119,7 +131,10 @@ describe('MeteringSchedulerService', () => {
         await service.run('sweep', async () => outcome);
 
         expect(
-          await metricValues(metricsRegistry, 'metering_scheduler_runs_total')
+          await incrementedMetricValues(
+            metricsRegistry,
+            'metering_scheduler_runs_total'
+          )
         ).toEqual([{ value: 1, labels: { job: 'sweep', outcome } }]);
       }
     );
@@ -149,7 +164,10 @@ describe('MeteringSchedulerService', () => {
         .catch(() => undefined);
 
       expect(
-        await metricValues(metricsRegistry, 'metering_scheduler_runs_total')
+        await incrementedMetricValues(
+          metricsRegistry,
+          'metering_scheduler_runs_total'
+        )
       ).toEqual([{ value: 1, labels: { job: 'sweep', outcome: 'error' } }]);
     });
   });
@@ -178,7 +196,10 @@ describe('MeteringSchedulerService', () => {
       });
 
       expect(
-        await metricValues(metricsRegistry, 'metering_scheduler_skips_total')
+        await incrementedMetricValues(
+          metricsRegistry,
+          'metering_scheduler_skips_total'
+        )
       ).toEqual([
         { value: 1, labels: { job: 'sweep', reason: 'ownership-unavailable' } },
       ]);
@@ -228,7 +249,10 @@ describe('MeteringSchedulerService', () => {
       });
 
       expect(
-        await metricValues(metricsRegistry, 'metering_scheduler_skips_total')
+        await incrementedMetricValues(
+          metricsRegistry,
+          'metering_scheduler_skips_total'
+        )
       ).toEqual([
         { value: 1, labels: { job: 'other', reason: 'ownership-unavailable' } },
       ]);
@@ -253,7 +277,7 @@ describe('MeteringSchedulerService', () => {
 
       it('records the lost lock in Prometheus', async () => {
         expect(
-          await metricValues(
+          await incrementedMetricValues(
             metricsRegistry,
             'metering_scheduler_lock_lost_total'
           )
@@ -288,7 +312,7 @@ describe('MeteringSchedulerService', () => {
       });
 
       expect(
-        await metricValues(
+        await incrementedMetricValues(
           metricsRegistry,
           'metering_scheduler_lock_lost_total'
         )

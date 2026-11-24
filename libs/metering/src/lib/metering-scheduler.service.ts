@@ -67,6 +67,7 @@ export class MeteringSchedulerService implements OnModuleInit {
    * the job, so this instance stops serving the job's last gauge values.
    */
   schedule(job: SchedulerJob, cron: string, resetGauges?: () => void): void {
+    this.metrics.initializeJob(job);
     if (resetGauges) {
       this.resetGaugesByJob.set(job, resetGauges);
     }

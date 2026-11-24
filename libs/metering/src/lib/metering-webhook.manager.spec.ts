@@ -19,7 +19,7 @@ import {
 } from './metering.error';
 import { WebhookMetrics } from './metering.metrics';
 import type { WebhookDispatchParams } from './metering.types';
-import { metricValues } from '../testing';
+import { incrementedMetricValues, metricValues } from '../testing';
 
 describe('MeteringWebhookManager', () => {
   const SIGNING_CLIENT_ID = 'vpn';
@@ -191,6 +191,14 @@ describe('MeteringWebhookManager', () => {
     });
 
     describe('Prometheus metrics', () => {
+      it('starts dispatch errors at zero for each configured client', async () => {
+        expect(
+          await metricValues(registry, 'metering_webhook_dispatch_errors_total')
+        ).toEqual([
+          { value: 0, labels: { signing_client_id: SIGNING_CLIENT_ID } },
+        ]);
+      });
+
       it('records a dispatch by signing client and status class', async () => {
         fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
@@ -210,7 +218,10 @@ describe('MeteringWebhookManager', () => {
         await meteringWebhookManager.dispatch(params());
 
         expect(
-          await metricValues(registry, 'metering_webhook_dispatch_errors_total')
+          await incrementedMetricValues(
+            registry,
+            'metering_webhook_dispatch_errors_total'
+          )
         ).toEqual([]);
       });
 
@@ -220,7 +231,10 @@ describe('MeteringWebhookManager', () => {
         await meteringWebhookManager.dispatch(params()).catch(() => undefined);
 
         expect(
-          await metricValues(registry, 'metering_webhook_dispatch_errors_total')
+          await incrementedMetricValues(
+            registry,
+            'metering_webhook_dispatch_errors_total'
+          )
         ).toEqual([
           { value: 1, labels: { signing_client_id: SIGNING_CLIENT_ID } },
         ]);
@@ -232,7 +246,10 @@ describe('MeteringWebhookManager', () => {
         await meteringWebhookManager.dispatch(params()).catch(() => undefined);
 
         expect(
-          await metricValues(registry, 'metering_webhook_dispatch_errors_total')
+          await incrementedMetricValues(
+            registry,
+            'metering_webhook_dispatch_errors_total'
+          )
         ).toEqual([
           { value: 1, labels: { signing_client_id: SIGNING_CLIENT_ID } },
         ]);

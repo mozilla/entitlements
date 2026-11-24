@@ -184,3 +184,13 @@ export function withSentryCronWrapper<
     },
   };
 }
+
+/** The samples of one metric that were incremented, so not still at their initial 0. */
+export async function incrementedMetricValues(
+  registry: Registry,
+  name: string
+): Promise<MetricValueWithName<string>[]> {
+  return (await metricValues(registry, name)).filter(
+    ({ value }) => value !== 0
+  );
+}

@@ -38,7 +38,7 @@ import {
 } from './usage-counters.manager';
 import { UsageRefillManager } from './usage-refill.manager';
 import { UsageRefillService } from './usage-refill.service';
-import { metricValues } from '../testing';
+import { incrementedMetricValues, metricValues } from '../testing';
 
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
@@ -167,9 +167,9 @@ describe('UsageRefillService', () => {
     it('records the outcome in Prometheus', async () => {
       await service.refillIfNeeded(NOW);
 
-      expect(await metricValues(registry, 'metering_refill_total')).toEqual([
-        { value: 1, labels: { outcome: 'checked' } },
-      ]);
+      expect(
+        await incrementedMetricValues(registry, 'metering_refill_total')
+      ).toEqual([{ value: 1, labels: { outcome: 'checked' } }]);
     });
 
     it('times the refill by outcome in Prometheus', async () => {

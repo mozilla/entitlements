@@ -19,7 +19,7 @@ import {
   ClickHouseTableNameError,
 } from './metering.error';
 import type { ClickHouseRateLimiters } from './metering.types';
-import { metricValues, testMetrics } from '../testing';
+import { incrementedMetricValues, testMetrics } from '../testing';
 
 const rowSchema = z.object({ subject: z.string(), usage: z.number() });
 
@@ -327,7 +327,10 @@ describe('ClickHouseClient', () => {
       await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
 
       expect(
-        await metricValues(registry, 'metering_clickhouse_limit_rejected_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_clickhouse_limit_rejected_total'
+        )
       ).toEqual([{ value: 1, labels: { operation: 'query', budget: 'read' } }]);
     });
 
@@ -435,7 +438,10 @@ describe('ClickHouseClient', () => {
       await client.query({ sql: 'SELECT 1', rowSchema }).catch(() => undefined);
 
       expect(
-        await metricValues(registry, 'metering_clickhouse_limiter_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_clickhouse_limiter_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { operation: 'query', budget: 'read' } }]);
     });
 

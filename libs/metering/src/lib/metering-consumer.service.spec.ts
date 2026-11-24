@@ -33,7 +33,7 @@ import { MeteringPubSubClient } from './metering-pubsub.provider';
 import { dayCountersExpireAt } from './utils/counterExpiry';
 import { hashEventId } from './utils/hashEventId';
 import { dayCountersKey, dedupeKey, sessionKey } from './utils/redisKeys';
-import { metricValues } from '../testing';
+import { incrementedMetricValues, metricValues } from '../testing';
 
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
@@ -264,7 +264,10 @@ describe('MeteringConsumerService', () => {
       } as PubSubMessage);
 
       expect(
-        await metricValues(registry, 'metering_consumer_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_consumer_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { stage: 'invalid' } }]);
     });
 
@@ -429,7 +432,10 @@ describe('MeteringConsumerService', () => {
       await service.flushNow();
 
       expect(
-        await metricValues(registry, 'metering_consumer_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_consumer_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { stage: 'dedupe' } }]);
     });
 
@@ -505,7 +511,10 @@ describe('MeteringConsumerService', () => {
       await service.flushNow();
 
       expect(
-        await metricValues(registry, 'metering_consumer_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_consumer_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { stage: 'confirm' } }]);
     });
 
@@ -727,7 +736,10 @@ describe('MeteringConsumerService', () => {
       await service.flushNow();
 
       expect(
-        await metricValues(registry, 'metering_consumer_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_consumer_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { stage: 'dedupe' } }]);
     });
   });
@@ -766,7 +778,10 @@ describe('MeteringConsumerService', () => {
       await service.flushNow();
 
       expect(
-        await metricValues(registry, 'metering_consumer_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_consumer_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { stage: 'meter' } }]);
     });
   });
@@ -878,7 +893,10 @@ describe('MeteringConsumerService', () => {
       await service.flushNow();
 
       expect(
-        await metricValues(registry, 'metering_consumer_errors_total')
+        await incrementedMetricValues(
+          registry,
+          'metering_consumer_errors_total'
+        )
       ).toEqual([{ value: 1, labels: { stage: 'insert' } }]);
     });
 
