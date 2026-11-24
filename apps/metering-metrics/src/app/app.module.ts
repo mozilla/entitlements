@@ -17,6 +17,7 @@ import {
   MeteringMetricsService,
   MeteringMetricsSchedulerService,
   MeteringSchedulerService,
+  MeteringStrapiCacheClientProvider,
   MeteringSweepManager,
   MeteringSweepRepository,
 } from '@entitlements/metering';
@@ -66,6 +67,7 @@ import { AppService } from './app.service';
     MeteringSweepRepository,
     StatsDProvider,
     StrapiClient,
+    MeteringStrapiCacheClientProvider,
   ],
 })
 export class AppModule implements OnApplicationShutdown {
