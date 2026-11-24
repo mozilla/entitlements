@@ -20,6 +20,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import { UsageGrantsMetrics } from './usage-grants.metrics';
 import { MeteringConfig } from './metering.config';
 import { MeteringFirestore } from './metering-firestore.provider';
 import { MeteringRedisClient } from './metering-redis.provider';
@@ -74,11 +75,15 @@ export class UsageGrantsManager {
     @Inject(MeteringFirestore) private readonly firestore: Firestore,
     @Inject(MeteringRedisClient) redis: MeteringRedis,
     @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: UsageGrantsMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {
     this.grantsCache = new RedisAdapter(redis);
     this.grantsCacheStrategy = new CacheFirstStrategy(
-      () => this.statsd.increment('metering.usage_grants.cache_write_error'),
+      () => {
+        this.statsd.increment('metering.usage_grants.cache_write_error');
+        this.metrics.cacheErrors.inc({ operation: 'write' });
+      },
       undefined,
       this.logger
     );
@@ -162,6 +167,7 @@ export class UsageGrantsManager {
         throw err;
       }
       this.statsd.increment('metering.usage_grants.cache_read_error');
+      this.metrics.cacheErrors.inc({ operation: 'read' });
       this.logger.error(err);
       return this.loadSubjectGrants(subject);
     }
@@ -179,6 +185,7 @@ export class UsageGrantsManager {
       await this.grantsCache.del(usageGrantsCacheKey(subject));
     } catch (err) {
       this.statsd.increment('metering.usage_grants.cache_clear_error');
+      this.metrics.cacheErrors.inc({ operation: 'clear' });
       this.logger.error(err);
     }
   }

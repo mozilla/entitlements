@@ -15,6 +15,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import { MetricsReportMetrics } from './metering-metrics.metrics';
 import type {
   MeterKey,
   MetricsReportAllResult,
@@ -32,12 +33,14 @@ export class MeteringMetricsService {
     private readonly meteringMetricsManager: MeteringMetricsManager,
     private readonly meteringSweepManager: MeteringSweepManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: MetricsReportMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   async reportAll(now: Date = new Date()): Promise<MetricsReportAllResult> {
     const startedAt = Date.now();
     const meters = await this.meteringSweepManager.findSweptMeters();
+    this.metrics.resetGauges();
 
     let failed = 0;
     for (const meter of meters) {
@@ -59,6 +62,7 @@ export class MeteringMetricsService {
       'metering.metrics_report_all.duration',
       Date.now() - startedAt
     );
+    this.metrics.allDuration.observe((Date.now() - startedAt) / 1000);
     return { total: meters.length, failed };
   }
 
@@ -91,6 +95,11 @@ export class MeteringMetricsService {
         'metering.metrics_report.duration',
         Date.now() - startedAt,
         { slug: params.slug }
+      );
+      this.metrics.reports.inc({ outcome, slug: params.slug });
+      this.metrics.duration.observe(
+        { slug: params.slug },
+        (Date.now() - startedAt) / 1000
       );
     }
   }
@@ -165,11 +174,18 @@ export class MeteringMetricsService {
       activeSubjectCountToday,
       tags
     );
+    const labels = { client_id: params.clientId, slug: params.slug };
+    this.metrics.meterLimit.set({ ...labels, unit: meter.unit }, meter.limit);
+    this.metrics.activeSubjectsToday.set(labels, activeSubjectCountToday);
     for (const { threshold, subjectCount } of notifiedSubjectCounts) {
       this.statsd.gauge('metering.metrics.notified_subjects', subjectCount, {
         ...tags,
         threshold: String(threshold),
       });
+      this.metrics.notifiedSubjects.set(
+        { ...labels, threshold: String(threshold) },
+        subjectCount
+      );
     }
   }
 }

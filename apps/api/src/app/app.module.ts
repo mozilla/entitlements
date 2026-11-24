@@ -12,6 +12,7 @@ import { AppService } from './app.service';
 import { RootConfigModule } from '../config/config.module';
 import {
   ClickHouseClient,
+  ClickHouseMetrics,
   ClickHouseRateLimitersProvider,
   MeteringAuthGuard,
   MeteringEventsManager,
@@ -27,7 +28,9 @@ import {
   UsageCountersManager,
   UsageGrantsController,
   UsageGrantsManager,
+  UsageGrantsMetrics,
   UsageGrantsService,
+  UsageMetrics,
   UsageService,
 } from '@entitlements/metering';
 import {
@@ -35,6 +38,11 @@ import {
   StrapiClient,
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
+import {
+  PrometheusRegistryProvider,
+  PrometheusRouteMiddleware,
+  PrometheusServer,
+} from '@entitlements/shared/metrics/prometheus';
 import {
   StatsDProvider,
   StatsDRouteMiddleware,
@@ -64,6 +72,11 @@ import {
     MeteringRedisClientProvider,
     MeteringSweepManager,
     MeteringSweepRepository,
+    ClickHouseMetrics,
+    UsageGrantsMetrics,
+    UsageMetrics,
+    PrometheusRegistryProvider,
+    PrometheusServer,
     StatsDProvider,
     StrapiClient,
     UsageCountersManager,
@@ -75,7 +88,7 @@ import {
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(StatsDRouteMiddleware)
+      .apply(StatsDRouteMiddleware, PrometheusRouteMiddleware)
       .exclude(
         { path: '__heartbeat__', method: RequestMethod.GET },
         { path: '__lbheartbeat__', method: RequestMethod.GET },

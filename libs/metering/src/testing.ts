@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 
+import { type MetricValueWithName, Registry } from '@prometheus-io/client';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';
@@ -16,6 +17,7 @@ import {
   SESSIONS_TABLE,
   WATERMARKS_TABLE,
 } from './lib/metering.constants';
+import { ClickHouseMetrics } from './lib/clickhouse.metrics';
 import type {
   ClickHouseRateLimiters,
   MeteringRedisPipeline,
@@ -92,10 +94,33 @@ export function integrationClickHouseRateLimiters(): ClickHouseRateLimiters {
   };
 }
 
+export function testMetrics<T>(Metrics: new (registry: Registry) => T): {
+  registry: Registry;
+  metrics: T;
+} {
+  const registry = new Registry();
+  return { registry, metrics: new Metrics(registry) };
+}
+
+/** The recorded samples of one metric, without histogram buckets. */
+export async function metricValues(
+  registry: Registry,
+  name: string
+): Promise<MetricValueWithName<string>[]> {
+  const metric = await registry.getSingleMetric(name)?.get();
+  if (!metric) {
+    throw new Error(`metric ${name} is not registered`);
+  }
+  return (metric.values as MetricValueWithName<string>[]).filter(
+    ({ metricName }) => !metricName?.endsWith('_bucket')
+  );
+}
+
 export function integrationClickHouseClient(): ClickHouseClient {
   return new ClickHouseClient(
     INTEGRATION_CLICKHOUSE_CONFIG,
     new StatsD({ mock: true }),
+    new ClickHouseMetrics(new Registry()),
     integrationClickHouseRateLimiters()
   );
 }
@@ -158,4 +183,21 @@ export function withSentryCronWrapper<
       };
     },
   };
+}
+
+/** The samples of one metric that were incremented, so not still at their initial 0. */
+export async function incrementedMetricValues(
+  registry: Registry,
+  name: string
+): Promise<MetricValueWithName<string>[]> {
+  return (await metricValues(registry, name)).filter(
+    ({ value }) => value !== 0
+  );
+}
+
+/** The samples `metricValues` returns for series that were never incremented. */
+export function zeroMetricValues(
+  labels: Record<string, string>[]
+): { value: number; labels: Record<string, string> }[] {
+  return labels.map((label) => ({ value: 0, labels: label }));
 }

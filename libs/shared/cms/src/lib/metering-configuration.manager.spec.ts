@@ -5,6 +5,7 @@
 import { Test } from '@nestjs/testing';
 import { DocumentNode } from 'graphql';
 import { StatsD } from 'hot-shots';
+import { type MetricValueWithName, Registry } from '@prometheus-io/client';
 
 import {
   StrapiClient,
@@ -14,6 +15,7 @@ import {
   StrapiMeterRawFactory,
   toStrapiMeter,
 } from '@entitlements/shared/cms';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 import { StatsDService } from '@entitlements/shared/metrics/statsd';
 import { MeteringConfigurationManager } from './metering-configuration.manager';
 
@@ -60,8 +62,10 @@ describe('MeteringConfigurationManager', () => {
   let manager: MeteringConfigurationManager;
   let mockStrapiClient: jest.Mocked<Pick<StrapiClient, 'query' | 'on'>>;
   let mockStatsd: jest.Mocked<Pick<StatsD, 'timing'>>;
+  let registry: Registry;
 
   beforeEach(async () => {
+    registry = new Registry();
     mockStatsd = {
       timing: jest.fn(),
     };
@@ -75,6 +79,7 @@ describe('MeteringConfigurationManager', () => {
       providers: [
         MeteringConfigurationManager,
         { provide: StatsDService, useValue: mockStatsd },
+        { provide: PrometheusRegistry, useValue: registry },
         { provide: StrapiClient, useValue: mockStrapiClient },
       ],
     }).compile();
@@ -149,6 +154,68 @@ describe('MeteringConfigurationManager', () => {
           cacheType: 'method',
         }
       );
+    });
+
+    describe('request duration histogram', () => {
+      const observations = async () =>
+        (
+          await registry
+            .getSingleMetric('cms_metering_request_duration_seconds')
+            ?.get()
+        )?.values.filter((value: MetricValueWithName<string>) =>
+          value.metricName?.endsWith('_sum')
+        );
+
+      it('records the duration in seconds with the operation name', async () => {
+        manager.onStrapiClientResponse({
+          method: 'query',
+          requestStartTime: 0,
+          requestEndTime: 250,
+          elapsed: 250,
+          cache: false,
+          cacheType: 'method',
+          query: {} as DocumentNode,
+          error: undefined,
+        });
+
+        expect(await observations()).toEqual([
+          expect.objectContaining({
+            value: 0.25,
+            labels: {
+              method: 'query',
+              error: 'false',
+              cache: 'false',
+              cache_type: 'method',
+              operation_name: 'MockOperation',
+            },
+          }),
+        ]);
+      });
+
+      it('omits the operation name when there is no query', async () => {
+        manager.onStrapiClientResponse({
+          method: 'query',
+          requestStartTime: 0,
+          requestEndTime: 250,
+          elapsed: 250,
+          cache: true,
+          cacheType: 'method',
+          query: undefined,
+          error: new Error('Test error'),
+        });
+
+        expect(await observations()).toEqual([
+          expect.objectContaining({
+            value: 0.25,
+            labels: {
+              method: 'query',
+              error: 'true',
+              cache: 'true',
+              cache_type: 'method',
+            },
+          }),
+        ]);
+      });
     });
   });
 

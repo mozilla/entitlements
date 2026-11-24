@@ -5,8 +5,10 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { VError } from 'verror';
+import { Registry } from '@prometheus-io/client';
 
 import { MockStatsDProvider } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import { MeteringWebhookManager } from './metering-webhook.manager';
 import { MeteringConfig, MockMeteringConfig } from './metering.config';
@@ -15,7 +17,9 @@ import {
   MissingClientSecretError,
   WebhookDispatchError,
 } from './metering.error';
+import { WebhookMetrics } from './metering-webhook.metrics';
 import type { WebhookDispatchParams } from './metering.types';
+import { incrementedMetricValues, metricValues } from '../testing';
 
 describe('MeteringWebhookManager', () => {
   const SIGNING_CLIENT_ID = 'vpn';
@@ -28,16 +32,20 @@ describe('MeteringWebhookManager', () => {
   let meteringWebhookManager: MeteringWebhookManager;
   let logger: { error: jest.Mock; log: jest.Mock };
   let fetchMock: jest.SpyInstance;
+  let registry: Registry;
 
   async function build(
     meteringConfig: MeteringConfig = METERING_CONFIG
   ): Promise<MeteringWebhookManager> {
+    registry = new Registry();
     const moduleRef = await Test.createTestingModule({
       providers: [
         MeteringWebhookManager,
         { provide: MeteringConfig, useValue: meteringConfig },
         { provide: Logger, useValue: logger },
         MockStatsDProvider,
+        { provide: PrometheusRegistry, useValue: registry },
+        WebhookMetrics,
       ],
     }).compile();
     return moduleRef.get(MeteringWebhookManager);
@@ -180,6 +188,84 @@ describe('MeteringWebhookManager', () => {
         )
       ).rejects.toThrow(MissingClientSecretError);
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    describe('Prometheus metrics', () => {
+      it('starts dispatch errors at zero for each configured client', async () => {
+        expect(
+          await metricValues(registry, 'metering_webhook_dispatch_errors_total')
+        ).toEqual([
+          { value: 0, labels: { signing_client_id: SIGNING_CLIENT_ID } },
+        ]);
+      });
+
+      it('records a dispatch by signing client and status class', async () => {
+        fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+        await meteringWebhookManager.dispatch(params());
+
+        expect(
+          await metricValues(registry, 'metering_webhook_dispatch_total')
+        ).toEqual([
+          {
+            value: 1,
+            labels: { signing_client_id: SIGNING_CLIENT_ID, status: '2xx' },
+          },
+        ]);
+      });
+
+      it('records no dispatch error for a 2xx response', async () => {
+        await meteringWebhookManager.dispatch(params());
+
+        expect(
+          await incrementedMetricValues(
+            registry,
+            'metering_webhook_dispatch_errors_total'
+          )
+        ).toEqual([]);
+      });
+
+      it('records a dispatch error for a non-2xx response', async () => {
+        fetchMock.mockResolvedValueOnce(new Response('', { status: 503 }));
+
+        await meteringWebhookManager.dispatch(params()).catch(() => undefined);
+
+        expect(
+          await incrementedMetricValues(
+            registry,
+            'metering_webhook_dispatch_errors_total'
+          )
+        ).toEqual([
+          { value: 1, labels: { signing_client_id: SIGNING_CLIENT_ID } },
+        ]);
+      });
+
+      it('records a dispatch error for a network failure', async () => {
+        fetchMock.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+        await meteringWebhookManager.dispatch(params()).catch(() => undefined);
+
+        expect(
+          await incrementedMetricValues(
+            registry,
+            'metering_webhook_dispatch_errors_total'
+          )
+        ).toEqual([
+          { value: 1, labels: { signing_client_id: SIGNING_CLIENT_ID } },
+        ]);
+      });
+
+      it('records a dispatch skipped for a missing signing secret', async () => {
+        await meteringWebhookManager
+          .dispatch(params({ signingClientId: 'no-such-client' }))
+          .catch(() => undefined);
+
+        expect(
+          await metricValues(registry, 'metering_webhook_no_secret_total')
+        ).toEqual([
+          { value: 1, labels: { signing_client_id: 'no-such-client' } },
+        ]);
+      });
     });
   });
 

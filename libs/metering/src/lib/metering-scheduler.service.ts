@@ -18,22 +18,30 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import { SchedulerMetrics } from './metering-scheduler.metrics';
 import type { SchedulerJob, SchedulerRunOutcome } from './metering.types';
 
 export const SCHEDULED_AT_BOOTSTRAP = CronExpression.EVERY_YEAR;
 
 @Injectable()
 export class MeteringSchedulerService implements OnModuleInit {
+  private readonly resetGaugesByJob = new Map<string, () => void>();
+
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly locksEvents: LocksEvents,
     @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: SchedulerMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   onModuleInit(): void {
     this.locksEvents.jobSkips$.subscribe(({ key, reason }) => {
       this.statsd.increment('metering.scheduler.skipped', { job: key, reason });
+      this.metrics.skips.inc({ job: key, reason });
+      if (reason === 'ownership-unavailable') {
+        this.resetGaugesByJob.get(key)?.();
+      }
     });
     this.locksEvents.events$.subscribe((event) => {
       if (event.type !== 'lock-lost') {
@@ -43,6 +51,10 @@ export class MeteringSchedulerService implements OnModuleInit {
         key: event.key,
         detectedBy: event.detectedBy,
       });
+      this.metrics.lockLost.inc({
+        key: event.key,
+        detected_by: event.detectedBy,
+      });
       this.logger.warn(
         `Lock lost: ${event.key} (${event.detectedBy})`,
         'MeteringScheduler'
@@ -50,7 +62,15 @@ export class MeteringSchedulerService implements OnModuleInit {
     });
   }
 
-  schedule(job: SchedulerJob, cron: string): void {
+  /**
+   * Starts `job` on `cron`. `resetGauges` runs whenever another instance owns
+   * the job, so this instance stops serving the job's last gauge values.
+   */
+  schedule(job: SchedulerJob, cron: string, resetGauges?: () => void): void {
+    this.metrics.initializeJob(job);
+    if (resetGauges) {
+      this.resetGaugesByJob.set(job, resetGauges);
+    }
     const cronJob = this.schedulerRegistry.getCronJob(job);
     cronJob.setTime(new CronTime(cron));
     cronJob.start();
@@ -64,11 +84,13 @@ export class MeteringSchedulerService implements OnModuleInit {
     try {
       const outcome = await fn();
       this.statsd.increment('metering.scheduler.run', { job, outcome });
+      this.metrics.runs.inc({ job, outcome });
     } catch (err) {
       this.statsd.increment('metering.scheduler.run', {
         job,
         outcome: 'error',
       });
+      this.metrics.runs.inc({ job, outcome: 'error' });
       throw err;
     }
   }

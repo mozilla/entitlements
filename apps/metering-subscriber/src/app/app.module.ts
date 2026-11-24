@@ -6,7 +6,9 @@ import { AppService } from './app.service';
 import { RootConfigModule } from '../config/config.module';
 import {
   ClickHouseClient,
+  ClickHouseMetrics,
   ClickHouseRateLimitersProvider,
+  ConsumerMetrics,
   MeteringConsumerService,
   MeteringEventsManager,
   MeteringEventsRepository,
@@ -19,6 +21,10 @@ import {
   StrapiClient,
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
+import {
+  PrometheusRegistryProvider,
+  PrometheusServer,
+} from '@entitlements/shared/metrics/prometheus';
 import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
 
 @Module({
@@ -40,6 +46,10 @@ import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
     MeteringEventsRepository,
     MeteringPubSubClientProvider,
     MeteringRedisClientProvider,
+    ClickHouseMetrics,
+    ConsumerMetrics,
+    PrometheusRegistryProvider,
+    PrometheusServer,
     StatsDProvider,
     StrapiClient,
     UsageCountersManager,

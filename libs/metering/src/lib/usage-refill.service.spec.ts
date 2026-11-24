@@ -4,6 +4,7 @@
 
 import { Logger, type LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Registry } from '@prometheus-io/client';
 
 import {
   MeteringConfigurationManager,
@@ -14,6 +15,7 @@ import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import {
   MeteringRedisConfig,
@@ -29,12 +31,14 @@ import {
   MockMeteringUsageCountersConfig,
 } from './metering-usage-counters.config';
 import { ClickHouseError } from './metering.error';
+import { RefillMetrics } from './usage-refill.metrics';
 import {
   UsageCountersManager,
   type PopulationState,
 } from './usage-counters.manager';
 import { UsageRefillManager } from './usage-refill.manager';
 import { UsageRefillService } from './usage-refill.service';
+import { incrementedMetricValues, metricValues } from '../testing';
 
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
@@ -81,9 +85,11 @@ describe('UsageRefillService', () => {
     Pick<UsageRefillManager, 'refillMeter' | 'refillDedupeKeys'>
   >;
   let statsd: jest.Mocked<Pick<StatsD, 'increment' | 'timing' | 'gauge'>>;
+  let registry: Registry;
   let logger: jest.Mocked<Pick<LoggerService, 'log' | 'warn' | 'error'>>;
 
   beforeEach(async () => {
+    registry = new Registry();
     meteringConfigurationManager = {
       getMeterBySlug: jest
         .fn()
@@ -132,6 +138,8 @@ describe('UsageRefillService', () => {
         { provide: UsageCountersManager, useValue: countersManager },
         { provide: UsageRefillManager, useValue: refillManager },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        RefillMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -155,6 +163,29 @@ describe('UsageRefillService', () => {
         outcome: 'checked',
       });
     });
+
+    it('records the outcome in Prometheus', async () => {
+      await service.refillIfNeeded(NOW);
+
+      expect(
+        await incrementedMetricValues(registry, 'metering_refill_total')
+      ).toEqual([{ value: 1, labels: { outcome: 'checked' } }]);
+    });
+
+    it('times the refill by outcome in Prometheus', async () => {
+      await service.refillIfNeeded(NOW);
+
+      expect(
+        (await metricValues(registry, 'metering_refill_duration_seconds')).find(
+          ({ metricName }) =>
+            metricName === 'metering_refill_duration_seconds_count'
+        )
+      ).toEqual({
+        metricName: 'metering_refill_duration_seconds_count',
+        value: 1,
+        labels: { outcome: 'checked' },
+      });
+    });
   });
 
   describe('when Redis is not fully populated', () => {
@@ -174,6 +205,18 @@ describe('UsageRefillService', () => {
         null,
         NOW
       );
+    });
+
+    it.each([
+      { name: 'metering_refill_counters', value: 3 },
+      { name: 'metering_refill_sessions', value: 0 },
+      { name: 'metering_refill_dedupe_keys', value: 4 },
+    ])('sets $name to $value in Prometheus', async ({ name, value }) => {
+      await service.refillIfNeeded(NOW);
+
+      expect(await metricValues(registry, name)).toEqual([
+        { value, labels: {} },
+      ]);
     });
 
     it('rebuilds the dedupe keys of the whole dedupe TTL', async () => {
@@ -362,6 +405,14 @@ describe('UsageRefillService', () => {
         'metering.refill.meter_error',
         { slug: 'broken' }
       );
+    });
+
+    it('records the failure for that meter in Prometheus', async () => {
+      await service.refillIfNeeded(NOW);
+
+      expect(
+        await metricValues(registry, 'metering_refill_meter_errors_total')
+      ).toEqual([{ value: 1, labels: { slug: 'broken' } }]);
     });
 
     describe('while Redis is not fully populated', () => {

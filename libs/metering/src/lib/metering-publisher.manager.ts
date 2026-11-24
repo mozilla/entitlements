@@ -10,6 +10,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import { UsageMetrics } from './usage.metrics';
 import { PublishError } from './metering.error';
 import type { MeteringWireEvent } from './metering.schema';
 import { MeteringPubSubConfig } from './metering-pubsub.config';
@@ -25,7 +26,8 @@ export class MeteringPublisherManager {
   constructor(
     meteringPubSubConfig: MeteringPubSubConfig,
     @Inject(MeteringPubSubClient) pubsub: PubSub,
-    @Inject(StatsDService) private readonly statsd: StatsD
+    @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: UsageMetrics
   ) {
     this.topic = pubsub.topic(meteringPubSubConfig.topicName, {
       batching: {
@@ -40,8 +42,10 @@ export class MeteringPublisherManager {
     try {
       await this.topic.publishMessage({ json: event });
       this.statsd.increment('metering.publisher.published');
+      this.metrics.published.inc();
     } catch (err) {
       this.statsd.increment('metering.publisher.publish_error');
+      this.metrics.publishErrors.inc();
       throw new PublishError(toError(err));
     }
   }

@@ -5,6 +5,7 @@
 import { Logger } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Registry } from '@prometheus-io/client';
 
 import {
   MeterBySlugResultUtil,
@@ -17,6 +18,7 @@ import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import {
   MockMeteringSweepConfig,
@@ -24,11 +26,13 @@ import {
 } from './metering-sweep.config';
 import { CATCH_UP_SLICE_MS } from './metering.constants';
 import { MeteringSweepManager } from './metering-sweep.manager';
+import { SweepMetrics } from './metering-sweep.metrics';
 import { notificationKey } from './utils/notificationKey';
 import { MeteringSweepService } from './metering-sweep.service';
 import { MeteringWebhookManager } from './metering-webhook.manager';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
+import { metricValues } from '../testing';
 
 const CLIENT_ID = 'vpn';
 const SLUG = 'tokens';
@@ -66,6 +70,7 @@ describe('MeteringSweepService', () => {
     Pick<UsageGrantsManager, 'getActiveGrantedAmount'>
   >;
   let statsd: jest.Mocked<Pick<StatsD, 'increment' | 'timing' | 'gauge'>>;
+  let registry: Registry;
   let logger: jest.Mocked<Pick<LoggerService, 'error' | 'log' | 'warn'>>;
 
   function utilFor(raw: StrapiMeterRaw): MeterBySlugResultUtil {
@@ -114,6 +119,7 @@ describe('MeteringSweepService', () => {
     usageGrantsManager = {
       getActiveGrantedAmount: jest.fn().mockResolvedValue(0),
     };
+    registry = new Registry();
     statsd = { increment: jest.fn(), timing: jest.fn(), gauge: jest.fn() };
     logger = { error: jest.fn(), log: jest.fn(), warn: jest.fn() };
 
@@ -130,6 +136,8 @@ describe('MeteringSweepService', () => {
         { provide: UsageGrantsManager, useValue: usageGrantsManager },
         { provide: UsageCountersManager, useValue: usageCountersManager },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        SweepMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -210,6 +218,19 @@ describe('MeteringSweepService', () => {
         NOW.getTime() - WATERMARK.getTime(),
         { slug: SLUG }
       );
+    });
+
+    it('sets the watermark age in seconds in Prometheus', async () => {
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_watermark_age_seconds')
+      ).toEqual([
+        {
+          value: (NOW.getTime() - WATERMARK.getTime()) / 1000,
+          labels: { slug: SLUG },
+        },
+      ]);
     });
 
     describe('catching up a stale watermark', () => {
@@ -548,6 +569,19 @@ describe('MeteringSweepService', () => {
       );
     });
 
+    it('records a delivered webhook by client, slug and threshold in Prometheus', async () => {
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_dispatched_total')
+      ).toEqual([
+        {
+          value: 1,
+          labels: { client_id: CLIENT_ID, slug: SLUG, threshold: '80' },
+        },
+      ]);
+    });
+
     it('counts each webhook that receives the crossing', async () => {
       meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
         utilFor(
@@ -577,6 +611,30 @@ describe('MeteringSweepService', () => {
       ]);
     });
 
+    it('records each webhook that receives the crossing in Prometheus', async () => {
+      meteringConfigurationManager.getMeterResultUtil.mockResolvedValue(
+        utilFor(
+          meter({
+            webhooks: [
+              StrapiMeterWebhookFactory({ signingClientId: 'wh-a' }),
+              StrapiMeterWebhookFactory({ signingClientId: 'wh-b' }),
+            ],
+          })
+        )
+      );
+
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_dispatched_total')
+      ).toEqual([
+        {
+          value: 2,
+          labels: { client_id: CLIENT_ID, slug: SLUG, threshold: '80' },
+        },
+      ]);
+    });
+
     it('does not count a webhook whose delivery failed', async () => {
       meteringWebhookManager.dispatch.mockRejectedValue(new Error('502'));
 
@@ -586,6 +644,26 @@ describe('MeteringSweepService', () => {
         'metering.sweep.dispatched',
         { clientId: CLIENT_ID, slug: SLUG, threshold: '80' }
       );
+    });
+
+    it('records no delivery in Prometheus for a webhook whose delivery failed', async () => {
+      meteringWebhookManager.dispatch.mockRejectedValue(new Error('502'));
+
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_dispatched_total')
+      ).toEqual([]);
+    });
+
+    it('records the failed delivery in Prometheus', async () => {
+      meteringWebhookManager.dispatch.mockRejectedValue(new Error('502'));
+
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_dispatch_errors_total')
+      ).toEqual([{ value: 1, labels: {} }]);
     });
 
     it('does not count a delivered webhook whose notification failed to save', async () => {
@@ -599,6 +677,18 @@ describe('MeteringSweepService', () => {
         'metering.sweep.dispatched',
         { clientId: CLIENT_ID, slug: SLUG, threshold: '80' }
       );
+    });
+
+    it('records no delivery in Prometheus when the notification failed to save', async () => {
+      meteringSweepManager.recordNotifications.mockRejectedValue(
+        new Error('clickhouse')
+      );
+
+      await service.sweep(params, NOW).catch(() => undefined);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_dispatched_total')
+      ).toEqual([]);
     });
 
     it('records nothing when the only webhook fails, so the next sweep retries', async () => {
@@ -621,6 +711,16 @@ describe('MeteringSweepService', () => {
         'metering.sweep.watermark_held',
         { slug: SLUG }
       );
+    });
+
+    it('records the held watermark in Prometheus', async () => {
+      meteringWebhookManager.dispatch.mockRejectedValue(new Error('502'));
+
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_watermark_held_total')
+      ).toEqual([{ value: 1, labels: { slug: SLUG } }]);
     });
 
     it('holds the watermark when another webhook still succeeds', async () => {
@@ -684,6 +784,27 @@ describe('MeteringSweepService', () => {
       expect(logger.error).toHaveBeenCalled();
       expect(meteringSweepManager.advanceWatermark).not.toHaveBeenCalled();
     });
+
+    it('records a subject that throws in Prometheus', async () => {
+      meteringSweepManager.findWindowCandidates.mockResolvedValue([
+        { subject: 'user-1', usage: 90 },
+        { subject: 'user-2', usage: 90 },
+      ]);
+      usageGrantsManager.getActiveGrantedAmount.mockImplementation(
+        async (subject) => {
+          if (subject === 'user-1') {
+            throw new Error('firestore');
+          }
+          return 0;
+        }
+      );
+
+      await service.sweep(params, NOW);
+
+      expect(
+        await metricValues(registry, 'metering_sweep_subject_errors_total')
+      ).toEqual([{ value: 1, labels: {} }]);
+    });
   });
 
   describe('observability', () => {
@@ -712,6 +833,62 @@ describe('MeteringSweepService', () => {
         expect.any(Number),
         { slug: SLUG }
       );
+    });
+
+    it('records the outcome by slug in Prometheus', async () => {
+      await service.sweep(params, NOW);
+
+      expect(await metricValues(registry, 'metering_sweep_total')).toEqual([
+        { value: 1, labels: { outcome: 'no-candidates', slug: SLUG } },
+      ]);
+    });
+
+    it('records an error outcome in Prometheus when the sweep fails', async () => {
+      meteringSweepManager.findWindowCandidates.mockRejectedValue(
+        new Error('clickhouse')
+      );
+
+      await service.sweep(params, NOW).catch(() => undefined);
+
+      expect(await metricValues(registry, 'metering_sweep_total')).toEqual([
+        { value: 1, labels: { outcome: 'error', slug: SLUG } },
+      ]);
+    });
+
+    it('times a failed sweep by slug in Prometheus', async () => {
+      meteringSweepManager.findWindowCandidates.mockRejectedValue(
+        new Error('clickhouse')
+      );
+
+      await service.sweep(params, NOW).catch(() => undefined);
+
+      expect(
+        (await metricValues(registry, 'metering_sweep_duration_seconds')).find(
+          ({ metricName }) =>
+            metricName === 'metering_sweep_duration_seconds_count'
+        )
+      ).toEqual({
+        metricName: 'metering_sweep_duration_seconds_count',
+        value: 1,
+        labels: { slug: SLUG },
+      });
+    });
+
+    it('times a sweep over every meter in Prometheus', async () => {
+      await service.sweepAll(NOW);
+
+      expect(
+        (
+          await metricValues(registry, 'metering_sweep_all_duration_seconds')
+        ).find(
+          ({ metricName }) =>
+            metricName === 'metering_sweep_all_duration_seconds_count'
+        )
+      ).toEqual({
+        metricName: 'metering_sweep_all_duration_seconds_count',
+        value: 1,
+        labels: {},
+      });
     });
   });
 
@@ -883,6 +1060,32 @@ describe('MeteringSweepService', () => {
           1,
           { slug: SLUG }
         );
+      });
+
+      it('records the opened session in Prometheus', async () => {
+        await service.sweep(params, NOW);
+
+        expect(
+          await metricValues(registry, 'metering_sweep_sessions_opened_total')
+        ).toEqual([{ value: 1, labels: { slug: SLUG } }]);
+      });
+
+      it('records the corrected session in Prometheus', async () => {
+        usageCountersManager.findSessionStarts.mockResolvedValue(
+          new Map([['user-1', new Date(startedAt.getTime() + 60_000)]])
+        );
+        meteringSweepManager.findSessionUsage.mockResolvedValue([
+          { subject: 'user-1', sessionStart: startedAt, usage: 9 },
+        ]);
+
+        await service.sweep(params, NOW);
+
+        expect(
+          await metricValues(
+            registry,
+            'metering_sweep_sessions_corrected_total'
+          )
+        ).toEqual([{ value: 1, labels: { slug: SLUG } }]);
       });
 
       it('writes a session Redis has not counted at all', async () => {

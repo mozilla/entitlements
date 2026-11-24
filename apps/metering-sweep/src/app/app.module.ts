@@ -10,6 +10,7 @@ import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 
 import {
   ClickHouseClient,
+  ClickHouseMetrics,
   ClickHouseRateLimitersProvider,
   MeteringFirestoreProvider,
   MeteringLockRedisClientProvider,
@@ -20,11 +21,16 @@ import {
   MeteringSweepRepository,
   MeteringSweepService,
   MeteringWebhookManager,
+  RefillMetrics,
+  SchedulerMetrics,
+  SweepMetrics,
   UsageCountersManager,
   UsageGrantsManager,
+  UsageGrantsMetrics,
   UsageRefillManager,
   UsageRefillRepository,
   UsageRefillService,
+  WebhookMetrics,
 } from '@entitlements/metering';
 import {
   MeteringConfigurationManager,
@@ -32,6 +38,10 @@ import {
 } from '@entitlements/shared/cms';
 import { FirestoreProvider } from '@entitlements/shared/db/firestore';
 import { RedisLockStore } from '@entitlements/shared/locks';
+import {
+  PrometheusRegistryProvider,
+  PrometheusServer,
+} from '@entitlements/shared/metrics/prometheus';
 import {
   StatsDProvider,
   StatsDService,
@@ -71,6 +81,14 @@ import { AppService } from './app.service';
     MeteringSweepRepository,
     MeteringSweepService,
     MeteringWebhookManager,
+    ClickHouseMetrics,
+    RefillMetrics,
+    SchedulerMetrics,
+    SweepMetrics,
+    UsageGrantsMetrics,
+    WebhookMetrics,
+    PrometheusRegistryProvider,
+    PrometheusServer,
     StatsDProvider,
     StrapiClient,
     UsageCountersManager,

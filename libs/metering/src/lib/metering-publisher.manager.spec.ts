@@ -4,11 +4,13 @@
 
 import type { PubSub } from '@google-cloud/pubsub';
 import { Test } from '@nestjs/testing';
+import { Registry } from '@prometheus-io/client';
 
 import {
   StatsDService,
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
+import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 
 import {
   MockMeteringPubSubConfig,
@@ -16,8 +18,10 @@ import {
 } from './metering-pubsub.config';
 import { MeteringPublisherManager } from './metering-publisher.manager';
 import { PublishError } from './metering.error';
+import { UsageMetrics } from './usage.metrics';
 import type { MeteringWireEvent } from './metering.schema';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
+import { metricValues } from '../testing';
 
 const EVENT: MeteringWireEvent = {
   id: 'event-1',
@@ -33,8 +37,10 @@ describe('MeteringPublisherManager', () => {
   let publishMessage: jest.Mock;
   let topic: jest.Mock;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
+  let registry: Registry;
 
   beforeEach(async () => {
+    registry = new Registry();
     publishMessage = jest.fn().mockResolvedValue('message-id');
     topic = jest.fn().mockReturnValue({ publishMessage });
     statsd = { increment: jest.fn() };
@@ -47,6 +53,8 @@ describe('MeteringPublisherManager', () => {
         { provide: MeteringPubSubConfig, useValue: MockMeteringPubSubConfig },
         { provide: MeteringPubSubClient, useValue: pubsub },
         { provide: StatsDService, useValue: statsd },
+        { provide: PrometheusRegistry, useValue: registry },
+        UsageMetrics,
       ],
     }).compile();
 
@@ -108,6 +116,22 @@ describe('MeteringPublisherManager', () => {
     );
   });
 
+  it('records a successful publish in Prometheus', async () => {
+    await manager.publish(EVENT);
+
+    expect(
+      await metricValues(registry, 'metering_publisher_published_total')
+    ).toEqual([{ value: 1, labels: {} }]);
+  });
+
+  it('does not record a successful publish as an error', async () => {
+    await manager.publish(EVENT);
+
+    expect(
+      await metricValues(registry, 'metering_publisher_errors_total')
+    ).toEqual([{ value: 0, labels: {} }]);
+  });
+
   it('wraps a publish failure in PublishError', async () => {
     publishMessage.mockRejectedValue(new Error('pubsub unavailable'));
 
@@ -121,6 +145,16 @@ describe('MeteringPublisherManager', () => {
     expect(statsd.increment).toHaveBeenCalledWith(
       'metering.publisher.publish_error'
     );
+  });
+
+  it('records a failed publish in Prometheus', async () => {
+    publishMessage.mockRejectedValue(new Error('pubsub unavailable'));
+
+    await manager.publish(EVENT).catch(() => undefined);
+
+    expect(
+      await metricValues(registry, 'metering_publisher_errors_total')
+    ).toEqual([{ value: 1, labels: {} }]);
   });
 
   it('wraps a non-Error rejection in PublishError', async () => {

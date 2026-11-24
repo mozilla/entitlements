@@ -22,6 +22,10 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
+import {
+  type ConsumerErrorStage,
+  ConsumerMetrics,
+} from './metering-consumer.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPubSubConfig } from './metering-pubsub.config';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
@@ -74,6 +78,7 @@ export class MeteringConsumerService
     private readonly meteringEventsManager: MeteringEventsManager,
     private readonly meteringConfigurationManager: MeteringConfigurationManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
+    private readonly metrics: ConsumerMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {
     this.subscription = pubsub.subscription(
@@ -88,7 +93,8 @@ export class MeteringConsumerService
       maxSize: this.meteringPubSubConfig.consumerBatchSize,
       flushIntervalMs: this.meteringPubSubConfig.consumerFlushIntervalMs,
       onFlush: (batch) => this.processBatch(batch),
-      onError: (err) => this.report('metering.consumer.flush_error', err),
+      onError: (err) =>
+        this.report('metering.consumer.flush_error', 'flush', err),
     });
   }
 
@@ -97,7 +103,7 @@ export class MeteringConsumerService
       this.handleMessage(message)
     );
     this.subscription.on('error', (err: Error) => {
-      this.report('metering.consumer.subscription_error', err);
+      this.report('metering.consumer.subscription_error', 'subscription', err);
     });
     this.started = true;
   }
@@ -123,12 +129,13 @@ export class MeteringConsumerService
     try {
       event = parseWireEvent(message.data);
     } catch (err) {
-      this.report('metering.consumer.invalid', err);
+      this.report('metering.consumer.invalid', 'invalid', err);
       message.ack();
       return;
     }
 
     this.statsd.increment('metering.consumer.received');
+    this.metrics.received.inc();
     const eventIdHash = hashEventId(event.id);
     this.buffer.push({
       message,
@@ -147,7 +154,7 @@ export class MeteringConsumerService
     try {
       ingestAllowed = await this.usageCountersManager.isIngestAllowed();
     } catch (err) {
-      this.nackAll(batch, 'metering.consumer.dedupe_error', err);
+      this.nackAll(batch, 'metering.consumer.dedupe_error', 'dedupe', err);
       return;
     }
     if (!ingestAllowed) {
@@ -155,6 +162,7 @@ export class MeteringConsumerService
         message.nack();
       }
       this.statsd.increment('metering.consumer.paused', batch.length);
+      this.metrics.paused.inc(batch.length);
       return;
     }
 
@@ -162,7 +170,7 @@ export class MeteringConsumerService
     try {
       classified = await this.classify(batch);
     } catch (err) {
-      this.nackAll(batch, 'metering.consumer.dedupe_error', err);
+      this.nackAll(batch, 'metering.consumer.dedupe_error', 'dedupe', err);
       return;
     }
     const { fresh, duplicates, pending } = classified;
@@ -172,6 +180,7 @@ export class MeteringConsumerService
         message.nack();
       }
       this.statsd.increment('metering.consumer.pending', pending.length);
+      this.metrics.pending.inc(pending.length);
     }
 
     if (fresh.length > 0) {
@@ -183,6 +192,7 @@ export class MeteringConsumerService
         message.ack();
       }
       this.statsd.increment('metering.consumer.duplicate', duplicates.length);
+      this.metrics.duplicates.inc(duplicates.length);
     }
   }
 
@@ -223,7 +233,7 @@ export class MeteringConsumerService
     for (const [slug, err] of failuresBySlug) {
       const unavailable = fresh.filter(({ event }) => event.slug === slug);
       await this.releaseClaims(unavailable.map((buffered) => buffered.key));
-      this.nackAll(unavailable, 'metering.consumer.meter_error', err);
+      this.nackAll(unavailable, 'metering.consumer.meter_error', 'meter', err);
     }
 
     const insertable = fresh.filter(
@@ -248,7 +258,7 @@ export class MeteringConsumerService
       await this.meteringEventsManager.insertEvents(events);
     } catch (err) {
       await this.releaseClaims(keys);
-      this.nackAll(insertable, 'metering.consumer.insert_error', err);
+      this.nackAll(insertable, 'metering.consumer.insert_error', 'insert', err);
       return;
     }
 
@@ -288,7 +298,7 @@ export class MeteringConsumerService
     try {
       await this.usageCountersManager.confirm(keys, counterWrites);
     } catch (err) {
-      this.report('metering.consumer.confirm_error', err);
+      this.report('metering.consumer.confirm_error', 'confirm', err);
     }
   }
 
@@ -319,18 +329,23 @@ export class MeteringConsumerService
       const tags = { clientId, slug };
       this.statsd.increment('metering.consumer.inserted', count, tags);
       this.statsd.increment('metering.consumer.inserted_amount', amount, tags);
+      const labels = { client_id: clientId, slug };
+      this.metrics.inserted.inc(labels, count);
+      this.metrics.insertedAmount.inc(labels, amount);
     }
   }
 
   private nackAll(
     batch: BufferedMessage[],
     metric: string,
+    stage: ConsumerErrorStage,
     err: unknown
   ): void {
     for (const { message } of batch) {
       message.nack();
     }
     this.statsd.increment(metric);
+    this.metrics.errors.inc({ stage });
     Sentry.withScope((scope) => {
       scope.setExtra('batchSize', batch.length);
       Sentry.captureException(err);
@@ -338,8 +353,13 @@ export class MeteringConsumerService
     this.logger.error(err);
   }
 
-  private report(metric: string, err: unknown): void {
+  private report(
+    metric: string,
+    stage: ConsumerErrorStage,
+    err: unknown
+  ): void {
     this.statsd.increment(metric);
+    this.metrics.errors.inc({ stage });
     Sentry.captureException(err);
     this.logger.error(err);
   }

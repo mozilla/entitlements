@@ -13,6 +13,8 @@ This is an [Nx](https://nx.dev) monorepo using pnpm and NestJS.
 | `metering-sweep`      | 3039 | Rebuilds Redis usage counters if needed and dispatches threshold webhooks, every minute.             |
 | `metering-metrics`    | 3040 | Sends usage gauges for every swept meter to StatsD, every 5 minutes.                                 |
 
+Each app also serves Prometheus metrics at `GET /metrics` on a separate port, 9464 by default (`PROMETHEUS_CONFIG__PORT`). Keep that port in-cluster. Locally, compose maps it to 9464–9467 for the apps in table order.
+
 Shared code lives in `libs/`. The domain logic is in `libs/metering`.
 
 ## Prerequisites

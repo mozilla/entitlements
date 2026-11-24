@@ -19,6 +19,8 @@ import {
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
 import { MeteringSweepService } from './metering-sweep.service';
+import { SweepMetrics } from './metering-sweep.metrics';
+import { RefillMetrics } from './usage-refill.metrics';
 import { UsageRefillService } from './usage-refill.service';
 
 @Injectable()
@@ -28,13 +30,19 @@ export class MeteringSweepSchedulerService implements OnApplicationBootstrap {
     private readonly meteringSchedulerService: MeteringSchedulerService,
     private readonly meteringSweepService: MeteringSweepService,
     private readonly usageRefillService: UsageRefillService,
+    private readonly sweepMetrics: SweepMetrics,
+    private readonly refillMetrics: RefillMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   onApplicationBootstrap(): void {
     this.meteringSchedulerService.schedule(
       'sweep',
-      this.meteringSweepSchedulerConfig.cron
+      this.meteringSweepSchedulerConfig.cron,
+      () => {
+        this.sweepMetrics.resetGauges();
+        this.refillMetrics.resetGauges();
+      }
     );
   }
 

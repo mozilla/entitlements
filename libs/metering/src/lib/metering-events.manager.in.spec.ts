@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 
+import { Registry } from '@prometheus-io/client';
 import { z } from 'zod';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';
@@ -20,6 +21,7 @@ import {
 } from '../testing';
 import { MeteringEventsRepository } from './metering-events.repository';
 import { ClickHouseError } from './metering.error';
+import { ClickHouseMetrics } from './clickhouse.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { hashEventId } from './utils/hashEventId';
 
@@ -260,6 +262,7 @@ describeClickHouse('MeteringEventsManager against a real ClickHouse', () => {
             maxBytesBeforeExternalGroupBy: 1,
           },
           new StatsD({ mock: true }),
+          new ClickHouseMetrics(new Registry()),
           integrationClickHouseRateLimiters()
         )
       )
