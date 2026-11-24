@@ -5,7 +5,7 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { Logger, type LoggerService } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 
 import {
   StatsDService,

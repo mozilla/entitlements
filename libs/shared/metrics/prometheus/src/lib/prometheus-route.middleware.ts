@@ -4,7 +4,7 @@
 
 import { Inject, Injectable, NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
-import { Counter, Histogram, type Registry } from 'prom-client';
+import { Counter, Histogram, type Registry } from '@prometheus-io/client';
 
 import { PrometheusRegistry } from './prometheus.registry';
 

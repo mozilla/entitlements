@@ -4,7 +4,7 @@
 
 import 'reflect-metadata';
 
-import type { Registry } from 'prom-client';
+import type { Registry } from '@prometheus-io/client';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { z } from 'zod';
 

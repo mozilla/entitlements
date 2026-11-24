@@ -4,7 +4,7 @@
 
 import type { PubSub } from '@google-cloud/pubsub';
 import { Test } from '@nestjs/testing';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 
 import {
   StatsDService,

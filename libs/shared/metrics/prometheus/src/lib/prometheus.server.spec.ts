@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import type { LoggerService } from '@nestjs/common';
-import { Counter, Registry } from 'prom-client';
+import { Counter, Registry } from '@prometheus-io/client';
 
 import { PrometheusConfig } from './prometheus.config';
 import { PrometheusServer } from './prometheus.server';

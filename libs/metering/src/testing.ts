@@ -4,7 +4,7 @@
 
 import 'reflect-metadata';
 
-import { type MetricValueWithName, Registry } from 'prom-client';
+import { type MetricValueWithName, Registry } from '@prometheus-io/client';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';

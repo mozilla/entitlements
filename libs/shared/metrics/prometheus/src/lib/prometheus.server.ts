@@ -18,7 +18,7 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
-import type { Registry } from 'prom-client';
+import type { Registry } from '@prometheus-io/client';
 
 import { PrometheusConfig } from './prometheus.config';
 import { PrometheusRegistry } from './prometheus.registry';

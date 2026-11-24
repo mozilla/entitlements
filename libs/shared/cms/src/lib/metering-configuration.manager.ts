@@ -5,7 +5,7 @@
 import { getOperationName } from '@apollo/client/utilities';
 import { Inject, Injectable } from '@nestjs/common';
 import { StatsD } from 'hot-shots';
-import { Histogram, type Registry } from 'prom-client';
+import { Histogram, type Registry } from '@prometheus-io/client';
 
 import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 import { StatsDService } from '@entitlements/shared/metrics/statsd';

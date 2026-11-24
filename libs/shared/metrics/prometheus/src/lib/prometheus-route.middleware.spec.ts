@@ -4,7 +4,7 @@
 
 import { EventEmitter } from 'node:events';
 import type { NextFunction, Request, Response } from 'express';
-import { type MetricValueWithName, Registry } from 'prom-client';
+import { type MetricValueWithName, Registry } from '@prometheus-io/client';
 
 import {
   PrometheusRouteMiddleware,

@@ -4,7 +4,7 @@
 
 import 'reflect-metadata';
 
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 import { z } from 'zod';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';

@@ -5,7 +5,7 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { VError } from 'verror';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 
 import { MockStatsDProvider } from '@entitlements/shared/metrics/statsd';
 import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';

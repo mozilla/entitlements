@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import type { FactoryProvider } from '@nestjs/common';
-import type { Registry } from 'prom-client';
+import type { Registry } from '@prometheus-io/client';
 
 import { PrometheusRegistryProvider } from './prometheus.registry';
 

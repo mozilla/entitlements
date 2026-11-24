@@ -3,7 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { Counter, Gauge, Histogram, type Registry } from 'prom-client';
+import {
+  Counter,
+  Gauge,
+  Histogram,
+  type Registry,
+} from '@prometheus-io/client';
 
 import { PrometheusRegistry } from '@entitlements/shared/metrics/prometheus';
 

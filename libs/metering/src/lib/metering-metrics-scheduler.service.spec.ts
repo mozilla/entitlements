@@ -7,7 +7,7 @@ import type { LoggerService } from '@nestjs/common';
 import { InMemoryLockStore, LocksModule, LocksStorage } from '@nestjs/locks';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 
 import {
   StatsDService,

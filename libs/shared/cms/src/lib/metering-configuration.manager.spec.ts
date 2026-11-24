@@ -5,7 +5,7 @@
 import { Test } from '@nestjs/testing';
 import { DocumentNode } from 'graphql';
 import { StatsD } from 'hot-shots';
-import { type MetricValueWithName, Registry } from 'prom-client';
+import { type MetricValueWithName, Registry } from '@prometheus-io/client';
 
 import {
   StrapiClient,

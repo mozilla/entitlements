@@ -6,7 +6,7 @@ import 'reflect-metadata';
 
 import Redis from 'ioredis';
 import { RateLimiterRedis } from 'rate-limiter-flexible';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 import { z } from 'zod';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';

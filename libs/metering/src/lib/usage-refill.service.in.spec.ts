@@ -5,7 +5,7 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 
 import {
   MeteringConfigurationManager,

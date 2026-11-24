@@ -12,7 +12,7 @@ import {
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { CronJob } from 'cron';
-import { Registry } from 'prom-client';
+import { Registry } from '@prometheus-io/client';
 
 import {
   StatsDService,
