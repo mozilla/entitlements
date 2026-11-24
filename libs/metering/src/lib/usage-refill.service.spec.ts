@@ -31,7 +31,7 @@ import {
   MockMeteringUsageCountersConfig,
 } from './metering-usage-counters.config';
 import { ClickHouseError } from './metering.error';
-import { MeteringMetrics } from './metering.metrics';
+import { RefillMetrics } from './metering.metrics';
 import {
   UsageCountersManager,
   type PopulationState,
@@ -139,7 +139,7 @@ describe('UsageRefillService', () => {
         { provide: UsageRefillManager, useValue: refillManager },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        RefillMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

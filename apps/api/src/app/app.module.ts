@@ -12,13 +12,13 @@ import { AppService } from './app.service';
 import { RootConfigModule } from '../config/config.module';
 import {
   ClickHouseClient,
+  ClickHouseMetrics,
   ClickHouseRateLimitersProvider,
   MeteringAuthGuard,
   MeteringEventsManager,
   MeteringEventsRepository,
   MeteringExceptionFilter,
   MeteringFirestoreProvider,
-  MeteringMetrics,
   MeteringPubSubClientProvider,
   MeteringPublisherManager,
   MeteringRedisClientProvider,
@@ -28,7 +28,9 @@ import {
   UsageCountersManager,
   UsageGrantsController,
   UsageGrantsManager,
+  UsageGrantsMetrics,
   UsageGrantsService,
+  UsageMetrics,
   UsageService,
 } from '@entitlements/metering';
 import {
@@ -70,7 +72,9 @@ import {
     MeteringRedisClientProvider,
     MeteringSweepManager,
     MeteringSweepRepository,
-    MeteringMetrics,
+    ClickHouseMetrics,
+    UsageGrantsMetrics,
+    UsageMetrics,
     PrometheusRegistryProvider,
     PrometheusServer,
     StatsDProvider,

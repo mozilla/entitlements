@@ -30,7 +30,7 @@ import {
   TimestampOutOfRangeError,
   UsageCountersError,
 } from './metering.error';
-import { MeteringMetrics } from './metering.metrics';
+import { UsageMetrics } from './metering.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 import { UsageService } from './usage.service';
@@ -101,7 +101,7 @@ describe('UsageService', () => {
         { provide: UsageGrantsManager, useValue: usageGrantsManager },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        UsageMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

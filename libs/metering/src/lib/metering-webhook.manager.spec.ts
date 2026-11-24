@@ -17,7 +17,7 @@ import {
   MissingClientSecretError,
   WebhookDispatchError,
 } from './metering.error';
-import { MeteringMetrics } from './metering.metrics';
+import { WebhookMetrics } from './metering.metrics';
 import type { WebhookDispatchParams } from './metering.types';
 import { metricValues } from '../testing';
 
@@ -45,7 +45,7 @@ describe('MeteringWebhookManager', () => {
         { provide: Logger, useValue: logger },
         MockStatsDProvider,
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        WebhookMetrics,
       ],
     }).compile();
     return moduleRef.get(MeteringWebhookManager);

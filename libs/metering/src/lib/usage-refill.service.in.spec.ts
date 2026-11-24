@@ -37,7 +37,7 @@ import {
   MeteringUsageCountersConfig,
   MockMeteringUsageCountersConfig,
 } from './metering-usage-counters.config';
-import { MeteringMetrics } from './metering.metrics';
+import { RefillMetrics } from './metering.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageRefillManager } from './usage-refill.manager';
 import { UsageRefillRepository } from './usage-refill.repository';
@@ -163,7 +163,7 @@ describeIntegration(
             },
           },
           { provide: PrometheusRegistry, useValue: new Registry() },
-          MeteringMetrics,
+          RefillMetrics,
           {
             provide: Logger,
             useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },

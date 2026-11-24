@@ -15,7 +15,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MeteringMetrics } from './metering.metrics';
+import { SweepMetrics } from './metering.metrics';
 import {
   CATCH_UP_SLICE_MS,
   MAX_TIMESTAMP_FUTURE_MS,
@@ -84,7 +84,7 @@ export class MeteringSweepService {
     private readonly usageGrantsManager: UsageGrantsManager,
     private readonly usageCountersManager: UsageCountersManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
-    private readonly metrics: MeteringMetrics,
+    private readonly metrics: SweepMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
@@ -119,7 +119,7 @@ export class MeteringSweepService {
     }
 
     this.statsd.timing('metering.sweep_all.duration', Date.now() - startedAt);
-    this.metrics.sweepAllDuration.observe((Date.now() - startedAt) / 1000);
+    this.metrics.allDuration.observe((Date.now() - startedAt) / 1000);
     return { total: meters.length, held, failed };
   }
 
@@ -151,7 +151,7 @@ export class MeteringSweepService {
         slug: params.slug,
       });
       this.metrics.sweeps.inc({ outcome, slug: params.slug });
-      this.metrics.sweepDuration.observe(
+      this.metrics.duration.observe(
         { slug: params.slug },
         (Date.now() - startedAt) / 1000
       );
@@ -180,7 +180,7 @@ export class MeteringSweepService {
       now.getTime() - watermark.getTime(),
       { slug: params.slug }
     );
-    this.metrics.sweepWatermarkAge.set(
+    this.metrics.watermarkAge.set(
       { slug: params.slug },
       (now.getTime() - watermark.getTime()) / 1000
     );
@@ -355,7 +355,7 @@ export class MeteringSweepService {
     this.statsd.increment('metering.sweep.watermark_held', {
       slug: params.slug,
     });
-    this.metrics.sweepWatermarkHeld.inc({ slug: params.slug });
+    this.metrics.watermarkHeld.inc({ slug: params.slug });
     return {
       ...totals,
       outcome: this.outcomeFor(totals, true),
@@ -433,7 +433,7 @@ export class MeteringSweepService {
       } else {
         failed += 1;
         this.statsd.increment('metering.sweep.subject_error');
-        this.metrics.sweepSubjectErrors.inc();
+        this.metrics.subjectErrors.inc();
         this.logger.error(result.reason);
       }
     }
@@ -446,7 +446,7 @@ export class MeteringSweepService {
           slug: notification.slug,
           threshold: String(notification.threshold),
         });
-        this.metrics.sweepDispatched.inc({
+        this.metrics.dispatched.inc({
           client_id: notification.clientId,
           slug: notification.slug,
           threshold: String(notification.threshold),
@@ -483,7 +483,7 @@ export class MeteringSweepService {
     this.statsd.increment('metering.sweep.sessions_opened', opened.length, {
       slug: params.slug,
     });
-    this.metrics.sweepSessionsOpened.inc({ slug: params.slug }, opened.length);
+    this.metrics.sessionsOpened.inc({ slug: params.slug }, opened.length);
     await this.correctCountedSessions(
       params,
       meter.window.durationMs,
@@ -537,10 +537,7 @@ export class MeteringSweepService {
         slug: params.slug,
       }
     );
-    this.metrics.sweepSessionsCorrected.inc(
-      { slug: params.slug },
-      diverged.length
-    );
+    this.metrics.sessionsCorrected.inc({ slug: params.slug }, diverged.length);
   }
 
   private async findWindowCandidates(
@@ -648,7 +645,7 @@ export class MeteringSweepService {
           });
         } catch (err) {
           this.statsd.increment('metering.sweep.dispatch_error');
-          this.metrics.sweepDispatchErrors.inc();
+          this.metrics.dispatchErrors.inc();
           this.logger.error(err);
           failed += 1;
           continue;

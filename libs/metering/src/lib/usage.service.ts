@@ -13,7 +13,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MeteringMetrics } from './metering.metrics';
+import { UsageMetrics } from './metering.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPublisherManager } from './metering-publisher.manager';
 import { MeteringSweepManager } from './metering-sweep.manager';
@@ -40,7 +40,7 @@ export class UsageService {
     private readonly usageCountersManager: UsageCountersManager,
     private readonly usageGrantsManager: UsageGrantsManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
-    private readonly metrics: MeteringMetrics,
+    private readonly metrics: UsageMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
@@ -118,18 +118,18 @@ export class UsageService {
       );
       if (counted) {
         this.statsd.increment('metering.usage.source', { source: 'redis' });
-        this.metrics.usageSource.inc({ source: 'redis' });
+        this.metrics.source.inc({ source: 'redis' });
         return counted;
       }
       this.statsd.increment('metering.usage.source', {
         source: 'clickhouse-not-populated',
       });
-      this.metrics.usageSource.inc({ source: 'clickhouse-not-populated' });
+      this.metrics.source.inc({ source: 'clickhouse-not-populated' });
     } catch (err) {
       this.statsd.increment('metering.usage.source', {
         source: 'clickhouse-redis-error',
       });
-      this.metrics.usageSource.inc({ source: 'clickhouse-redis-error' });
+      this.metrics.source.inc({ source: 'clickhouse-redis-error' });
       this.logger.error(err);
     }
     return this.findWindowUsageInClickHouse(key, window, now);

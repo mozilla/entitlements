@@ -20,9 +20,14 @@ import { MeteringSweepSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
 import { MeteringSweepSchedulerService } from './metering-sweep-scheduler.service';
 import { MeteringSweepService } from './metering-sweep.service';
-import { MeteringMetrics } from './metering.metrics';
+import {
+  RefillMetrics,
+  SchedulerMetrics,
+  SweepMetrics,
+} from './metering.metrics';
 import { UsageRefillService } from './usage-refill.service';
 import type { SweepAllResult } from './metering.types';
+import { metricValues } from '../testing';
 
 jest.mock('@nestjs/schedule', () =>
   jest
@@ -63,7 +68,9 @@ describe('MeteringSweepSchedulerService', () => {
         { provide: UsageRefillService, useValue: refillService },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: new Registry() },
-        MeteringMetrics,
+        RefillMetrics,
+        SchedulerMetrics,
+        SweepMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -253,6 +260,32 @@ describe('MeteringSweepSchedulerService', () => {
           { job: 'sweep', reason: 'ownership-unavailable' }
         );
       });
+
+      it('clears the watermark age gauge', async () => {
+        moduleRef.get(SweepMetrics).watermarkAge.set({ slug: 'tokens' }, 60);
+
+        await service.sweep();
+
+        expect(
+          await metricValues(
+            moduleRef.get(PrometheusRegistry),
+            'metering_sweep_watermark_age_seconds'
+          )
+        ).toEqual([]);
+      });
+
+      it('zeroes the refill gauges', async () => {
+        moduleRef.get(RefillMetrics).counters.set(12);
+
+        await service.sweep();
+
+        expect(
+          await metricValues(
+            moduleRef.get(PrometheusRegistry),
+            'metering_refill_counters'
+          )
+        ).toEqual([{ value: 0, labels: {} }]);
+      });
     });
 
     describe('when a sweep is still running on another instance', () => {
@@ -273,6 +306,19 @@ describe('MeteringSweepSchedulerService', () => {
           'metering.scheduler.skipped',
           { job: 'sweep', reason: 'run-lock-unavailable' }
         );
+      });
+
+      it('keeps the watermark age gauge', async () => {
+        moduleRef.get(SweepMetrics).watermarkAge.set({ slug: 'tokens' }, 60);
+
+        await service.sweep();
+
+        expect(
+          await metricValues(
+            moduleRef.get(PrometheusRegistry),
+            'metering_sweep_watermark_age_seconds'
+          )
+        ).toEqual([{ value: 60, labels: { slug: 'tokens' } }]);
       });
     });
 

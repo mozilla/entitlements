@@ -18,31 +18,29 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MeteringMetrics } from './metering.metrics';
+import { SchedulerMetrics } from './metering.metrics';
 import type { SchedulerJob, SchedulerRunOutcome } from './metering.types';
 
 export const SCHEDULED_AT_BOOTSTRAP = CronExpression.EVERY_YEAR;
 
-const SCHEDULER_JOBS: readonly string[] = ['sweep', 'metrics'];
-const isSchedulerJob = (key: string): key is SchedulerJob =>
-  SCHEDULER_JOBS.includes(key);
-
 @Injectable()
 export class MeteringSchedulerService implements OnModuleInit {
+  private readonly resetGaugesByJob = new Map<string, () => void>();
+
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly locksEvents: LocksEvents,
     @Inject(StatsDService) private readonly statsd: StatsD,
-    private readonly metrics: MeteringMetrics,
+    private readonly metrics: SchedulerMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   onModuleInit(): void {
     this.locksEvents.jobSkips$.subscribe(({ key, reason }) => {
       this.statsd.increment('metering.scheduler.skipped', { job: key, reason });
-      this.metrics.schedulerSkips.inc({ job: key, reason });
-      if (reason === 'ownership-unavailable' && isSchedulerJob(key)) {
-        this.metrics.resetJobGauges(key);
+      this.metrics.skips.inc({ job: key, reason });
+      if (reason === 'ownership-unavailable') {
+        this.resetGaugesByJob.get(key)?.();
       }
     });
     this.locksEvents.events$.subscribe((event) => {
@@ -53,7 +51,7 @@ export class MeteringSchedulerService implements OnModuleInit {
         key: event.key,
         detectedBy: event.detectedBy,
       });
-      this.metrics.schedulerLockLost.inc({
+      this.metrics.lockLost.inc({
         key: event.key,
         detected_by: event.detectedBy,
       });
@@ -64,7 +62,14 @@ export class MeteringSchedulerService implements OnModuleInit {
     });
   }
 
-  schedule(job: SchedulerJob, cron: string): void {
+  /**
+   * Starts `job` on `cron`. `resetGauges` runs whenever another instance owns
+   * the job, so this instance stops serving the job's last gauge values.
+   */
+  schedule(job: SchedulerJob, cron: string, resetGauges?: () => void): void {
+    if (resetGauges) {
+      this.resetGaugesByJob.set(job, resetGauges);
+    }
     const cronJob = this.schedulerRegistry.getCronJob(job);
     cronJob.setTime(new CronTime(cron));
     cronJob.start();
@@ -78,13 +83,13 @@ export class MeteringSchedulerService implements OnModuleInit {
     try {
       const outcome = await fn();
       this.statsd.increment('metering.scheduler.run', { job, outcome });
-      this.metrics.schedulerRuns.inc({ job, outcome });
+      this.metrics.runs.inc({ job, outcome });
     } catch (err) {
       this.statsd.increment('metering.scheduler.run', {
         job,
         outcome: 'error',
       });
-      this.metrics.schedulerRuns.inc({ job, outcome: 'error' });
+      this.metrics.runs.inc({ job, outcome: 'error' });
       throw err;
     }
   }

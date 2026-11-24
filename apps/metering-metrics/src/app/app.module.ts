@@ -10,9 +10,9 @@ import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 
 import {
   ClickHouseClient,
+  ClickHouseMetrics,
   ClickHouseRateLimitersProvider,
   MeteringLockRedisClientProvider,
-  MeteringMetrics,
   MeteringMetricsManager,
   MeteringMetricsRepository,
   MeteringMetricsService,
@@ -20,6 +20,8 @@ import {
   MeteringSchedulerService,
   MeteringSweepManager,
   MeteringSweepRepository,
+  MetricsReportMetrics,
+  SchedulerMetrics,
 } from '@entitlements/metering';
 import {
   MeteringConfigurationManager,
@@ -69,7 +71,9 @@ import { AppService } from './app.service';
     MeteringSchedulerService,
     MeteringSweepManager,
     MeteringSweepRepository,
-    MeteringMetrics,
+    ClickHouseMetrics,
+    MetricsReportMetrics,
+    SchedulerMetrics,
     PrometheusRegistryProvider,
     PrometheusServer,
     StatsDProvider,

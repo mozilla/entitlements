@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 
+import { Registry } from 'prom-client';
 import { z } from 'zod';
 
 import { StatsD } from '@entitlements/shared/metrics/statsd';
@@ -15,12 +16,12 @@ import {
   INTEGRATION_CLICKHOUSE_CONFIG,
   integrationClickHouseClient,
   integrationClickHouseRateLimiters,
-  testMeteringMetrics,
   optimizeFinal,
   truncateMeteringTables,
 } from '../testing';
 import { MeteringEventsRepository } from './metering-events.repository';
 import { ClickHouseError } from './metering.error';
+import { ClickHouseMetrics } from './metering.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { hashEventId } from './utils/hashEventId';
 
@@ -261,7 +262,7 @@ describeClickHouse('MeteringEventsManager against a real ClickHouse', () => {
             maxBytesBeforeExternalGroupBy: 1,
           },
           new StatsD({ mock: true }),
-          testMeteringMetrics().metrics,
+          new ClickHouseMetrics(new Registry()),
           integrationClickHouseRateLimiters()
         )
       )

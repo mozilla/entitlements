@@ -26,7 +26,7 @@ import {
 } from './metering-sweep.config';
 import { CATCH_UP_SLICE_MS } from './metering.constants';
 import { MeteringSweepManager } from './metering-sweep.manager';
-import { MeteringMetrics } from './metering.metrics';
+import { SweepMetrics } from './metering.metrics';
 import { notificationKey } from './utils/notificationKey';
 import { MeteringSweepService } from './metering-sweep.service';
 import { MeteringWebhookManager } from './metering-webhook.manager';
@@ -137,7 +137,7 @@ describe('MeteringSweepService', () => {
         { provide: UsageCountersManager, useValue: usageCountersManager },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        SweepMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

@@ -4,7 +4,11 @@
 
 import { Logger } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
-import { LocksEvents, LocksModule } from '@nestjs/locks';
+import {
+  LocksEvents,
+  LocksModule,
+  type LocksJobSkipReason,
+} from '@nestjs/locks';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { CronJob } from 'cron';
@@ -20,7 +24,7 @@ import {
   MeteringSchedulerService,
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
-import { MeteringMetrics } from './metering.metrics';
+import { SchedulerMetrics } from './metering.metrics';
 import { metricValues } from '../testing';
 
 const CONFIGURED_CRON = '0 0 1 2 *';
@@ -32,7 +36,6 @@ describe('MeteringSchedulerService', () => {
   let cronJob: CronJob;
   let statsd: jest.Mocked<Pick<StatsD, 'increment'>>;
   let metricsRegistry: Registry;
-  let metrics: MeteringMetrics;
   let logger: jest.Mocked<Pick<LoggerService, 'log' | 'warn' | 'debug'>>;
 
   beforeEach(async () => {
@@ -47,14 +50,13 @@ describe('MeteringSchedulerService', () => {
         SchedulerRegistry,
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: metricsRegistry },
-        MeteringMetrics,
+        SchedulerMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
     await moduleRef.init();
 
     service = moduleRef.get(MeteringSchedulerService);
-    metrics = moduleRef.get(MeteringMetrics);
     registry = moduleRef.get(SchedulerRegistry);
     cronJob = CronJob.from({
       cronTime: SCHEDULED_AT_BOOTSTRAP,
@@ -182,81 +184,39 @@ describe('MeteringSchedulerService', () => {
       ]);
     });
 
-    describe('when the metrics job skips because another instance owns it', () => {
-      beforeEach(() => {
-        metrics.meterLimit.set(
-          { client_id: 'vpn', slug: 'tokens', unit: 'tokens' },
-          100
-        );
-        metrics.activeSubjectsToday.set(
-          { client_id: 'vpn', slug: 'tokens' },
-          7
-        );
-        metrics.notifiedSubjects.set(
-          { client_id: 'vpn', slug: 'tokens', threshold: '80' },
-          3
-        );
-        moduleRef.get(LocksEvents).emitJobSkipped({
-          type: 'job-skipped',
-          job: 'MeteringMetricsSchedulerService.reportMetrics',
-          key: 'metrics',
-          reason: 'ownership-unavailable',
-        });
-      });
+    describe('when a job was scheduled with a gauge reset', () => {
+      let resetGauges: jest.Mock;
 
-      it.each([
-        'metering_meter_limit',
-        'metering_active_subjects_today',
-        'metering_notified_subjects',
-      ])('resets %s', async (name) => {
-        expect(await metricValues(metricsRegistry, name)).toEqual([]);
-      });
-    });
-
-    describe('when the sweep job skips because another instance owns it', () => {
-      beforeEach(() => {
-        metrics.sweepWatermarkAge.set({ slug: 'tokens' }, 60);
-        metrics.refillCounters.set(12);
+      const skip = (key: string, reason: LocksJobSkipReason) =>
         moduleRef.get(LocksEvents).emitJobSkipped({
           type: 'job-skipped',
           job: 'MeteringSweepSchedulerService.sweep',
-          key: 'sweep',
-          reason: 'ownership-unavailable',
+          key,
+          reason,
         });
+
+      beforeEach(() => {
+        resetGauges = jest.fn();
+        service.schedule('sweep', CONFIGURED_CRON, resetGauges);
       });
 
-      it('resets the watermark age', async () => {
-        expect(
-          await metricValues(
-            metricsRegistry,
-            'metering_sweep_watermark_age_seconds'
-          )
-        ).toEqual([]);
+      it('resets the gauges when another instance owns the job', () => {
+        skip('sweep', 'ownership-unavailable');
+
+        expect(resetGauges).toHaveBeenCalledTimes(1);
       });
 
-      it('resets the refill gauges to zero', async () => {
-        expect(
-          await metricValues(metricsRegistry, 'metering_refill_counters')
-        ).toEqual([{ value: 0, labels: {} }]);
-      });
-    });
+      it('keeps the gauges when an overlapping run holds the run lock', () => {
+        skip('sweep', 'run-lock-unavailable');
 
-    it('keeps the job gauges when the run lock is held by an overlapping run', async () => {
-      metrics.sweepWatermarkAge.set({ slug: 'tokens' }, 60);
-
-      moduleRef.get(LocksEvents).emitJobSkipped({
-        type: 'job-skipped',
-        job: 'MeteringSweepSchedulerService.sweep',
-        key: 'sweep',
-        reason: 'run-lock-unavailable',
+        expect(resetGauges).not.toHaveBeenCalled();
       });
 
-      expect(
-        await metricValues(
-          metricsRegistry,
-          'metering_sweep_watermark_age_seconds'
-        )
-      ).toEqual([{ value: 60, labels: { slug: 'tokens' } }]);
+      it('keeps the gauges when another job is owned elsewhere', () => {
+        skip('metrics', 'ownership-unavailable');
+
+        expect(resetGauges).not.toHaveBeenCalled();
+      });
     });
 
     it('records an ownership skip for a key that is not a scheduler job', async () => {

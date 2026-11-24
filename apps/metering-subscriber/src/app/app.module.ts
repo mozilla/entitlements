@@ -6,11 +6,12 @@ import { AppService } from './app.service';
 import { RootConfigModule } from '../config/config.module';
 import {
   ClickHouseClient,
+  ClickHouseMetrics,
   ClickHouseRateLimitersProvider,
+  ConsumerMetrics,
   MeteringConsumerService,
   MeteringEventsManager,
   MeteringEventsRepository,
-  MeteringMetrics,
   MeteringPubSubClientProvider,
   MeteringRedisClientProvider,
   UsageCountersManager,
@@ -45,7 +46,8 @@ import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
     MeteringEventsRepository,
     MeteringPubSubClientProvider,
     MeteringRedisClientProvider,
-    MeteringMetrics,
+    ClickHouseMetrics,
+    ConsumerMetrics,
     PrometheusRegistryProvider,
     PrometheusServer,
     StatsDProvider,

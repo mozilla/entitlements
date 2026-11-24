@@ -21,7 +21,7 @@ import {
 import { MockMeteringFirestoreProvider } from './metering-firestore.provider';
 import { MeteringRedisClient } from './metering-redis.provider';
 import { UsageGrantsLoadError } from './metering.error';
-import { MeteringMetrics } from './metering.metrics';
+import { UsageGrantsMetrics } from './metering.metrics';
 import type { MeteringRedis } from './metering.types';
 import { UsageGrantsManager } from './usage-grants.manager';
 import {
@@ -76,7 +76,7 @@ describe('UsageGrantsManager', () => {
         { provide: MeteringRedisClient, useValue: redis },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        UsageGrantsMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

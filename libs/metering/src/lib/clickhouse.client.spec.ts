@@ -12,14 +12,14 @@ import { StatsD } from '@entitlements/shared/metrics/statsd';
 
 import { ClickHouseClient } from './clickhouse.client';
 import { ClickHouseConfig } from './clickhouse.config';
-import type { MeteringMetrics } from './metering.metrics';
+import { ClickHouseMetrics } from './metering.metrics';
 import {
   ClickHouseError,
   ClickHouseRateLimitError,
   ClickHouseTableNameError,
 } from './metering.error';
 import type { ClickHouseRateLimiters } from './metering.types';
-import { metricValues, testMeteringMetrics } from '../testing';
+import { metricValues, testMetrics } from '../testing';
 
 const rowSchema = z.object({ subject: z.string(), usage: z.number() });
 
@@ -30,7 +30,7 @@ describe('ClickHouseClient', () => {
   let increment: jest.SpyInstance;
   let rateLimiters: ClickHouseRateLimiters;
   let registry: Registry;
-  let metrics: MeteringMetrics;
+  let metrics: ClickHouseMetrics;
 
   const config: ClickHouseConfig = {
     url: 'https://clickhouse.example.com:8443',
@@ -79,7 +79,7 @@ describe('ClickHouseClient', () => {
         duration: 60,
       }),
     };
-    ({ registry, metrics } = testMeteringMetrics());
+    ({ registry, metrics } = testMetrics(ClickHouseMetrics));
     client = new ClickHouseClient(config, statsd, metrics, rateLimiters);
   });
 

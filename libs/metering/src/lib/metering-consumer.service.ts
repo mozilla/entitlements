@@ -22,7 +22,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { type ConsumerErrorStage, MeteringMetrics } from './metering.metrics';
+import { type ConsumerErrorStage, ConsumerMetrics } from './metering.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPubSubConfig } from './metering-pubsub.config';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
@@ -75,7 +75,7 @@ export class MeteringConsumerService
     private readonly meteringEventsManager: MeteringEventsManager,
     private readonly meteringConfigurationManager: MeteringConfigurationManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
-    private readonly metrics: MeteringMetrics,
+    private readonly metrics: ConsumerMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {
     this.subscription = pubsub.subscription(
@@ -132,7 +132,7 @@ export class MeteringConsumerService
     }
 
     this.statsd.increment('metering.consumer.received');
-    this.metrics.consumerReceived.inc();
+    this.metrics.received.inc();
     const eventIdHash = hashEventId(event.id);
     this.buffer.push({
       message,
@@ -159,7 +159,7 @@ export class MeteringConsumerService
         message.nack();
       }
       this.statsd.increment('metering.consumer.paused', batch.length);
-      this.metrics.consumerPaused.inc(batch.length);
+      this.metrics.paused.inc(batch.length);
       return;
     }
 
@@ -177,7 +177,7 @@ export class MeteringConsumerService
         message.nack();
       }
       this.statsd.increment('metering.consumer.pending', pending.length);
-      this.metrics.consumerPending.inc(pending.length);
+      this.metrics.pending.inc(pending.length);
     }
 
     if (fresh.length > 0) {
@@ -189,7 +189,7 @@ export class MeteringConsumerService
         message.ack();
       }
       this.statsd.increment('metering.consumer.duplicate', duplicates.length);
-      this.metrics.consumerDuplicates.inc(duplicates.length);
+      this.metrics.duplicates.inc(duplicates.length);
     }
   }
 
@@ -327,8 +327,8 @@ export class MeteringConsumerService
       this.statsd.increment('metering.consumer.inserted', count, tags);
       this.statsd.increment('metering.consumer.inserted_amount', amount, tags);
       const labels = { client_id: clientId, slug };
-      this.metrics.consumerInserted.inc(labels, count);
-      this.metrics.consumerInsertedAmount.inc(labels, amount);
+      this.metrics.inserted.inc(labels, count);
+      this.metrics.insertedAmount.inc(labels, amount);
     }
   }
 
@@ -342,7 +342,7 @@ export class MeteringConsumerService
       message.nack();
     }
     this.statsd.increment(metric);
-    this.metrics.consumerErrors.inc({ stage });
+    this.metrics.errors.inc({ stage });
     Sentry.withScope((scope) => {
       scope.setExtra('batchSize', batch.length);
       Sentry.captureException(err);
@@ -356,7 +356,7 @@ export class MeteringConsumerService
     err: unknown
   ): void {
     this.statsd.increment(metric);
-    this.metrics.consumerErrors.inc({ stage });
+    this.metrics.errors.inc({ stage });
     Sentry.captureException(err);
     this.logger.error(err);
   }

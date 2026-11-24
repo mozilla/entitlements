@@ -26,7 +26,7 @@ import {
 import { MeteringConsumerService } from './metering-consumer.service';
 import { MeteringEventsManager } from './metering-events.manager';
 import { ClickHouseError, UsageCountersError } from './metering.error';
-import { MeteringMetrics } from './metering.metrics';
+import { ConsumerMetrics } from './metering.metrics';
 import type { DedupeStatus, PubSubMessage } from './metering.types';
 import { UsageCountersManager } from './usage-counters.manager';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
@@ -153,7 +153,7 @@ describe('MeteringConsumerService', () => {
         },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        ConsumerMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

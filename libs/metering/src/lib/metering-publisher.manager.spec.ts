@@ -18,7 +18,7 @@ import {
 } from './metering-pubsub.config';
 import { MeteringPublisherManager } from './metering-publisher.manager';
 import { PublishError } from './metering.error';
-import { MeteringMetrics } from './metering.metrics';
+import { UsageMetrics } from './metering.metrics';
 import type { MeteringWireEvent } from './metering.schema';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
 import { metricValues } from '../testing';
@@ -54,7 +54,7 @@ describe('MeteringPublisherManager', () => {
         { provide: MeteringPubSubClient, useValue: pubsub },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        UsageMetrics,
       ],
     }).compile();
 

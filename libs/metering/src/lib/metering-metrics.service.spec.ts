@@ -23,7 +23,7 @@ import { ClickHouseError } from './metering.error';
 import { MeteringMetricsManager } from './metering-metrics.manager';
 import { MeteringMetricsService } from './metering-metrics.service';
 import { MeteringSweepManager } from './metering-sweep.manager';
-import { MeteringMetrics } from './metering.metrics';
+import { MetricsReportMetrics } from './metering.metrics';
 import { metricValues } from '../testing';
 
 const CLIENT_ID = 'vpn';
@@ -107,7 +107,7 @@ describe('MeteringMetricsService', () => {
         { provide: MeteringSweepManager, useValue: meteringSweepManager },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: registry },
-        MeteringMetrics,
+        MetricsReportMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();

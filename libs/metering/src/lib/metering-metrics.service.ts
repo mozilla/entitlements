@@ -15,7 +15,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MeteringMetrics } from './metering.metrics';
+import { MetricsReportMetrics } from './metering.metrics';
 import type {
   MeterKey,
   MetricsReportAllResult,
@@ -33,14 +33,14 @@ export class MeteringMetricsService {
     private readonly meteringMetricsManager: MeteringMetricsManager,
     private readonly meteringSweepManager: MeteringSweepManager,
     @Inject(StatsDService) private readonly statsd: StatsD,
-    private readonly metrics: MeteringMetrics,
+    private readonly metrics: MetricsReportMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   async reportAll(now: Date = new Date()): Promise<MetricsReportAllResult> {
     const startedAt = Date.now();
     const meters = await this.meteringSweepManager.findSweptMeters();
-    this.metrics.resetJobGauges('metrics');
+    this.metrics.resetGauges();
 
     let failed = 0;
     for (const meter of meters) {
@@ -62,9 +62,7 @@ export class MeteringMetricsService {
       'metering.metrics_report_all.duration',
       Date.now() - startedAt
     );
-    this.metrics.metricsReportAllDuration.observe(
-      (Date.now() - startedAt) / 1000
-    );
+    this.metrics.allDuration.observe((Date.now() - startedAt) / 1000);
     return { total: meters.length, failed };
   }
 
@@ -98,8 +96,8 @@ export class MeteringMetricsService {
         Date.now() - startedAt,
         { slug: params.slug }
       );
-      this.metrics.metricsReports.inc({ outcome, slug: params.slug });
-      this.metrics.metricsReportDuration.observe(
+      this.metrics.reports.inc({ outcome, slug: params.slug });
+      this.metrics.duration.observe(
         { slug: params.slug },
         (Date.now() - startedAt) / 1000
       );

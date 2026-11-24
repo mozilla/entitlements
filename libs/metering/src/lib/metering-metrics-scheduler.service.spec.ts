@@ -19,8 +19,9 @@ import { MeteringMetricsSchedulerService } from './metering-metrics-scheduler.se
 import { MeteringMetricsService } from './metering-metrics.service';
 import { MeteringMetricsSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
-import { MeteringMetrics } from './metering.metrics';
+import { MetricsReportMetrics, SchedulerMetrics } from './metering.metrics';
 import type { MetricsReportAllResult } from './metering.types';
+import { metricValues } from '../testing';
 
 jest.mock('@nestjs/schedule', () =>
   jest
@@ -57,7 +58,8 @@ describe('MeteringMetricsSchedulerService', () => {
         { provide: MeteringMetricsService, useValue: metricsService },
         { provide: StatsDService, useValue: statsd },
         { provide: PrometheusRegistry, useValue: new Registry() },
-        MeteringMetrics,
+        MetricsReportMetrics,
+        SchedulerMetrics,
         { provide: Logger, useValue: logger },
       ],
     }).compile();
@@ -166,6 +168,24 @@ describe('MeteringMetricsSchedulerService', () => {
           { job: 'metrics', reason: 'ownership-unavailable' }
         );
       });
+
+      it('clears the metrics gauges', async () => {
+        moduleRef
+          .get(MetricsReportMetrics)
+          .meterLimit.set(
+            { client_id: 'vpn', slug: 'tokens', unit: 'tokens' },
+            100
+          );
+
+        await service.reportMetrics();
+
+        expect(
+          await metricValues(
+            moduleRef.get(PrometheusRegistry),
+            'metering_meter_limit'
+          )
+        ).toEqual([]);
+      });
     });
 
     describe('when a report is still running on another instance', () => {
@@ -186,6 +206,29 @@ describe('MeteringMetricsSchedulerService', () => {
           'metering.scheduler.skipped',
           { job: 'metrics', reason: 'run-lock-unavailable' }
         );
+      });
+
+      it('keeps the metrics gauges', async () => {
+        moduleRef
+          .get(MetricsReportMetrics)
+          .meterLimit.set(
+            { client_id: 'vpn', slug: 'tokens', unit: 'tokens' },
+            100
+          );
+
+        await service.reportMetrics();
+
+        expect(
+          await metricValues(
+            moduleRef.get(PrometheusRegistry),
+            'metering_meter_limit'
+          )
+        ).toEqual([
+          {
+            value: 100,
+            labels: { client_id: 'vpn', slug: 'tokens', unit: 'tokens' },
+          },
+        ]);
       });
     });
 

@@ -17,7 +17,7 @@ import {
   SESSIONS_TABLE,
   WATERMARKS_TABLE,
 } from './lib/metering.constants';
-import { MeteringMetrics } from './lib/metering.metrics';
+import { ClickHouseMetrics } from './lib/metering.metrics';
 import type {
   ClickHouseRateLimiters,
   MeteringRedisPipeline,
@@ -94,12 +94,12 @@ export function integrationClickHouseRateLimiters(): ClickHouseRateLimiters {
   };
 }
 
-export function testMeteringMetrics(): {
+export function testMetrics<T>(Metrics: new (registry: Registry) => T): {
   registry: Registry;
-  metrics: MeteringMetrics;
+  metrics: T;
 } {
   const registry = new Registry();
-  return { registry, metrics: new MeteringMetrics(registry) };
+  return { registry, metrics: new Metrics(registry) };
 }
 
 /** The recorded samples of one metric, without histogram buckets. */
@@ -120,7 +120,7 @@ export function integrationClickHouseClient(): ClickHouseClient {
   return new ClickHouseClient(
     INTEGRATION_CLICKHOUSE_CONFIG,
     new StatsD({ mock: true }),
-    new MeteringMetrics(new Registry()),
+    new ClickHouseMetrics(new Registry()),
     integrationClickHouseRateLimiters()
   );
 }

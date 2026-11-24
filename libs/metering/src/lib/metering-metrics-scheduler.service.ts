@@ -18,6 +18,7 @@ import {
   MeteringSchedulerService,
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
+import { MetricsReportMetrics } from './metering.metrics';
 
 @Injectable()
 export class MeteringMetricsSchedulerService implements OnApplicationBootstrap {
@@ -25,13 +26,15 @@ export class MeteringMetricsSchedulerService implements OnApplicationBootstrap {
     private readonly meteringMetricsSchedulerConfig: MeteringMetricsSchedulerConfig,
     private readonly meteringSchedulerService: MeteringSchedulerService,
     private readonly meteringMetricsService: MeteringMetricsService,
+    private readonly metricsReportMetrics: MetricsReportMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {}
 
   onApplicationBootstrap(): void {
     this.meteringSchedulerService.schedule(
       'metrics',
-      this.meteringMetricsSchedulerConfig.cron
+      this.meteringMetricsSchedulerConfig.cron,
+      () => this.metricsReportMetrics.resetGauges()
     );
   }
 

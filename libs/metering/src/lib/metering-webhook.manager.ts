@@ -13,7 +13,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MeteringMetrics } from './metering.metrics';
+import { WebhookMetrics } from './metering.metrics';
 import { MeteringConfig } from './metering.config';
 import {
   EmptyClientSecretError,
@@ -34,7 +34,7 @@ export class MeteringWebhookManager {
   constructor(
     meteringConfig: MeteringConfig,
     @Inject(StatsDService) private readonly statsd: StatsD,
-    private readonly metrics: MeteringMetrics,
+    private readonly metrics: WebhookMetrics,
     @Inject(Logger) private readonly logger: LoggerService
   ) {
     this.secretByClientId = new Map();
@@ -60,7 +60,7 @@ export class MeteringWebhookManager {
       this.statsd.increment('metering.webhook.no_secret', {
         signingClientId: params.signingClientId,
       });
-      this.metrics.webhookNoSecret.inc({
+      this.metrics.noSecret.inc({
         signing_client_id: params.signingClientId,
       });
       throw new MissingClientSecretError(params.signingClientId, params.slug);
@@ -105,7 +105,7 @@ export class MeteringWebhookManager {
       signingClientId: params.signingClientId,
       status: statusBucket(response.status),
     });
-    this.metrics.webhookDispatches.inc({
+    this.metrics.dispatches.inc({
       signing_client_id: params.signingClientId,
       status: statusBucket(response.status),
     });
@@ -133,7 +133,7 @@ export class MeteringWebhookManager {
     this.statsd.increment('metering.webhook.dispatch_error', {
       signingClientId: params.signingClientId,
     });
-    this.metrics.webhookDispatchErrors.inc({
+    this.metrics.dispatchErrors.inc({
       signing_client_id: params.signingClientId,
     });
     this.logger.error(err);
