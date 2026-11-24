@@ -12,6 +12,7 @@ import {
   MeteringEventsRepository,
   MeteringPubSubClientProvider,
   MeteringRedisClientProvider,
+  MeteringStrapiCacheClientProvider,
   UsageCountersManager,
 } from '@entitlements/metering';
 import {
@@ -42,6 +43,7 @@ import { StatsDProvider } from '@entitlements/shared/metrics/statsd';
     MeteringRedisClientProvider,
     StatsDProvider,
     StrapiClient,
+    MeteringStrapiCacheClientProvider,
     UsageCountersManager,
   ],
 })
