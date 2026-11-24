@@ -19,7 +19,8 @@ import {
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
 import { MeteringSweepService } from './metering-sweep.service';
-import { RefillMetrics, SweepMetrics } from './metering.metrics';
+import { SweepMetrics } from './metering-sweep.metrics';
+import { RefillMetrics } from './usage-refill.metrics';
 import { UsageRefillService } from './usage-refill.service';
 
 @Injectable()

@@ -37,7 +37,7 @@ import {
   MeteringUsageCountersConfig,
   MockMeteringUsageCountersConfig,
 } from './metering-usage-counters.config';
-import { RefillMetrics } from './metering.metrics';
+import { RefillMetrics } from './usage-refill.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageRefillManager } from './usage-refill.manager';
 import { UsageRefillRepository } from './usage-refill.repository';

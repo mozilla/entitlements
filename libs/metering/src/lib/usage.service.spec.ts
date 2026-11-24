@@ -30,7 +30,7 @@ import {
   TimestampOutOfRangeError,
   UsageCountersError,
 } from './metering.error';
-import { UsageMetrics } from './metering.metrics';
+import { UsageMetrics } from './usage.metrics';
 import { UsageCountersManager } from './usage-counters.manager';
 import { UsageGrantsManager } from './usage-grants.manager';
 import { UsageService } from './usage.service';

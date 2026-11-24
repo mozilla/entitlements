@@ -31,7 +31,7 @@ import {
   MockMeteringUsageCountersConfig,
 } from './metering-usage-counters.config';
 import { ClickHouseError } from './metering.error';
-import { RefillMetrics } from './metering.metrics';
+import { RefillMetrics } from './usage-refill.metrics';
 import {
   UsageCountersManager,
   type PopulationState,

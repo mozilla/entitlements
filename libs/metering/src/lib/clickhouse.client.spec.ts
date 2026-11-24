@@ -12,7 +12,7 @@ import { StatsD } from '@entitlements/shared/metrics/statsd';
 
 import { ClickHouseClient } from './clickhouse.client';
 import { ClickHouseConfig } from './clickhouse.config';
-import { ClickHouseMetrics } from './metering.metrics';
+import { ClickHouseMetrics } from './clickhouse.metrics';
 import {
   ClickHouseError,
   ClickHouseRateLimitError,

@@ -20,7 +20,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { UsageGrantsMetrics } from './metering.metrics';
+import { UsageGrantsMetrics } from './usage-grants.metrics';
 import { MeteringConfig } from './metering.config';
 import { MeteringFirestore } from './metering-firestore.provider';
 import { MeteringRedisClient } from './metering-redis.provider';

@@ -20,11 +20,9 @@ import { MeteringSweepSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
 import { MeteringSweepSchedulerService } from './metering-sweep-scheduler.service';
 import { MeteringSweepService } from './metering-sweep.service';
-import {
-  RefillMetrics,
-  SchedulerMetrics,
-  SweepMetrics,
-} from './metering.metrics';
+import { SchedulerMetrics } from './metering-scheduler.metrics';
+import { SweepMetrics } from './metering-sweep.metrics';
+import { RefillMetrics } from './usage-refill.metrics';
 import { UsageRefillService } from './usage-refill.service';
 import type { SweepAllResult } from './metering.types';
 import { metricValues } from '../testing';

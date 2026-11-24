@@ -21,7 +21,7 @@ import {
 } from '../testing';
 import { MeteringEventsRepository } from './metering-events.repository';
 import { ClickHouseError } from './metering.error';
-import { ClickHouseMetrics } from './metering.metrics';
+import { ClickHouseMetrics } from './clickhouse.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { hashEventId } from './utils/hashEventId';
 

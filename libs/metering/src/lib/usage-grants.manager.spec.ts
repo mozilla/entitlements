@@ -21,7 +21,7 @@ import {
 import { MockMeteringFirestoreProvider } from './metering-firestore.provider';
 import { MeteringRedisClient } from './metering-redis.provider';
 import { UsageGrantsLoadError } from './metering.error';
-import { UsageGrantsMetrics } from './metering.metrics';
+import { UsageGrantsMetrics } from './usage-grants.metrics';
 import type { MeteringRedis } from './metering.types';
 import { UsageGrantsManager } from './usage-grants.manager';
 import {

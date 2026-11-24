@@ -17,7 +17,7 @@ import {
   SESSIONS_TABLE,
   WATERMARKS_TABLE,
 } from './lib/metering.constants';
-import { ClickHouseMetrics } from './lib/metering.metrics';
+import { ClickHouseMetrics } from './lib/clickhouse.metrics';
 import type {
   ClickHouseRateLimiters,
   MeteringRedisPipeline,
@@ -193,4 +193,11 @@ export async function incrementedMetricValues(
   return (await metricValues(registry, name)).filter(
     ({ value }) => value !== 0
   );
+}
+
+/** The samples `metricValues` returns for series that were never incremented. */
+export function zeroMetricValues(
+  labels: Record<string, string>[]
+): { value: number; labels: Record<string, string> }[] {
+  return labels.map((label) => ({ value: 0, labels: label }));
 }

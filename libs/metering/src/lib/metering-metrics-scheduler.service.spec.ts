@@ -19,7 +19,8 @@ import { MeteringMetricsSchedulerService } from './metering-metrics-scheduler.se
 import { MeteringMetricsService } from './metering-metrics.service';
 import { MeteringMetricsSchedulerConfig } from './metering-scheduler.config';
 import { MeteringSchedulerService } from './metering-scheduler.service';
-import { MetricsReportMetrics, SchedulerMetrics } from './metering.metrics';
+import { MetricsReportMetrics } from './metering-metrics.metrics';
+import { SchedulerMetrics } from './metering-scheduler.metrics';
 import type { MetricsReportAllResult } from './metering.types';
 import { metricValues } from '../testing';
 

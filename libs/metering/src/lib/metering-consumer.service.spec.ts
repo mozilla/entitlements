@@ -26,7 +26,7 @@ import {
 import { MeteringConsumerService } from './metering-consumer.service';
 import { MeteringEventsManager } from './metering-events.manager';
 import { ClickHouseError, UsageCountersError } from './metering.error';
-import { ConsumerMetrics } from './metering.metrics';
+import { ConsumerMetrics } from './metering-consumer.metrics';
 import type { DedupeStatus, PubSubMessage } from './metering.types';
 import { UsageCountersManager } from './usage-counters.manager';
 import { MeteringPubSubClient } from './metering-pubsub.provider';

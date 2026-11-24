@@ -26,7 +26,7 @@ import {
 } from './metering-sweep.config';
 import { CATCH_UP_SLICE_MS } from './metering.constants';
 import { MeteringSweepManager } from './metering-sweep.manager';
-import { SweepMetrics } from './metering.metrics';
+import { SweepMetrics } from './metering-sweep.metrics';
 import { notificationKey } from './utils/notificationKey';
 import { MeteringSweepService } from './metering-sweep.service';
 import { MeteringWebhookManager } from './metering-webhook.manager';

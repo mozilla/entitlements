@@ -15,7 +15,7 @@ import { connectRateLimiterStore } from './clickhouse-rate-limiter.provider';
 import { ClickHouseClient } from './clickhouse.client';
 import { MockMeteringRedisConfig } from './metering-redis.config';
 import { INTEGRATION_CLICKHOUSE_CONFIG } from '../testing';
-import { ClickHouseMetrics } from './metering.metrics';
+import { ClickHouseMetrics } from './clickhouse.metrics';
 import { ClickHouseRateLimitError } from './metering.error';
 
 const REDIS_HOST = process.env['REDIS_TEST_HOST'] ?? 'localhost';

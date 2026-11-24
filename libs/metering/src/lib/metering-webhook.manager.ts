@@ -13,7 +13,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { WebhookMetrics } from './metering.metrics';
+import { WebhookMetrics } from './metering-webhook.metrics';
 import { MeteringConfig } from './metering.config';
 import {
   EmptyClientSecretError,

@@ -22,7 +22,10 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { type ConsumerErrorStage, ConsumerMetrics } from './metering.metrics';
+import {
+  type ConsumerErrorStage,
+  ConsumerMetrics,
+} from './metering-consumer.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPubSubConfig } from './metering-pubsub.config';
 import { MeteringPubSubClient } from './metering-pubsub.provider';

@@ -10,7 +10,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { UsageMetrics } from './metering.metrics';
+import { UsageMetrics } from './usage.metrics';
 import { PublishError } from './metering.error';
 import type { MeteringWireEvent } from './metering.schema';
 import { MeteringPubSubConfig } from './metering-pubsub.config';

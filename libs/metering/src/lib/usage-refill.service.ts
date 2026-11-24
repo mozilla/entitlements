@@ -13,7 +13,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { RefillMetrics } from './metering.metrics';
+import { RefillMetrics } from './usage-refill.metrics';
 import { MeteringRedisConfig } from './metering-redis.config';
 import { MeteringSweepConfig } from './metering-sweep.config';
 import { MeteringSweepManager } from './metering-sweep.manager';

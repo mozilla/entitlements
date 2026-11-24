@@ -18,7 +18,7 @@ import {
 } from './metering-pubsub.config';
 import { MeteringPublisherManager } from './metering-publisher.manager';
 import { PublishError } from './metering.error';
-import { UsageMetrics } from './metering.metrics';
+import { UsageMetrics } from './usage.metrics';
 import type { MeteringWireEvent } from './metering.schema';
 import { MeteringPubSubClient } from './metering-pubsub.provider';
 import { metricValues } from '../testing';

@@ -18,7 +18,7 @@ import {
   MeteringSchedulerService,
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
-import { MetricsReportMetrics } from './metering.metrics';
+import { MetricsReportMetrics } from './metering-metrics.metrics';
 
 @Injectable()
 export class MeteringMetricsSchedulerService implements OnApplicationBootstrap {

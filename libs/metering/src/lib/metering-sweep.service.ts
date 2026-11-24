@@ -15,7 +15,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { SweepMetrics } from './metering.metrics';
+import { SweepMetrics } from './metering-sweep.metrics';
 import {
   CATCH_UP_SLICE_MS,
   MAX_TIMESTAMP_FUTURE_MS,

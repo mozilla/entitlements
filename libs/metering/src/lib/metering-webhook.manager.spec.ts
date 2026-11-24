@@ -17,7 +17,7 @@ import {
   MissingClientSecretError,
   WebhookDispatchError,
 } from './metering.error';
-import { WebhookMetrics } from './metering.metrics';
+import { WebhookMetrics } from './metering-webhook.metrics';
 import type { WebhookDispatchParams } from './metering.types';
 import { incrementedMetricValues, metricValues } from '../testing';
 

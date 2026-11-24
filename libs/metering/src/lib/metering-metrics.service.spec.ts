@@ -23,7 +23,7 @@ import { ClickHouseError } from './metering.error';
 import { MeteringMetricsManager } from './metering-metrics.manager';
 import { MeteringMetricsService } from './metering-metrics.service';
 import { MeteringSweepManager } from './metering-sweep.manager';
-import { MetricsReportMetrics } from './metering.metrics';
+import { MetricsReportMetrics } from './metering-metrics.metrics';
 import { metricValues } from '../testing';
 
 const CLIENT_ID = 'vpn';

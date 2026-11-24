@@ -15,7 +15,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { MetricsReportMetrics } from './metering.metrics';
+import { MetricsReportMetrics } from './metering-metrics.metrics';
 import type {
   MeterKey,
   MetricsReportAllResult,

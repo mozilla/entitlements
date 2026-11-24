@@ -18,7 +18,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { SchedulerMetrics } from './metering.metrics';
+import { SchedulerMetrics } from './metering-scheduler.metrics';
 import type { SchedulerJob, SchedulerRunOutcome } from './metering.types';
 
 export const SCHEDULED_AT_BOOTSTRAP = CronExpression.EVERY_YEAR;

@@ -13,7 +13,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { UsageMetrics } from './metering.metrics';
+import { UsageMetrics } from './usage.metrics';
 import { MeteringEventsManager } from './metering-events.manager';
 import { MeteringPublisherManager } from './metering-publisher.manager';
 import { MeteringSweepManager } from './metering-sweep.manager';

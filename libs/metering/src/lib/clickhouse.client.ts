@@ -11,7 +11,7 @@ import {
   type StatsD,
 } from '@entitlements/shared/metrics/statsd';
 
-import { ClickHouseMetrics } from './metering.metrics';
+import { ClickHouseMetrics } from './clickhouse.metrics';
 import { ClickHouseRateLimitersToken } from './clickhouse-rate-limiter.provider';
 import { ClickHouseConfig } from './clickhouse.config';
 import {

@@ -24,7 +24,7 @@ import {
   MeteringSchedulerService,
   SCHEDULED_AT_BOOTSTRAP,
 } from './metering-scheduler.service';
-import { SchedulerMetrics } from './metering.metrics';
+import { SchedulerMetrics } from './metering-scheduler.metrics';
 import { incrementedMetricValues, metricValues } from '../testing';
 
 const CONFIGURED_CRON = '0 0 1 2 *';
